@@ -6,6 +6,8 @@ local api = vim.api
 local fn = vim.fn
 local utils = require('jujutsu.utils')
 local signs = require('jujutsu.signs')
+local log = require('jujutsu.log')
+local highlight = require('jujutsu.highlight')
 local cache = {}
 
 -- Default configuration
@@ -48,15 +50,47 @@ local default_config = {
 		enable = false
 	},
 	on_attach           = nil,
+	log_window          = {
+		enable = true, -- Enable the log window feature
+		width = 80, -- Width of the window
+		height = 25, -- Height of the window
+		position = "left", -- 'left', 'right', 'top', 'bottom', 'center'
+		border = "single", -- Border style
+		show_graph = true, -- Show graph in log by default
+		auto_refresh = true, -- Auto refresh the log window
+		refresh_interval = 5000, -- Refresh interval in ms
+	},
 }
 
 -- Initialize the plugin
 function M.setup(opts)
 	config = vim.tbl_deep_extend('force', default_config, opts or {})
+
+	-- Set up highlight groups
+	highlight.setup()
+
+	-- Set up signs
 	signs.setup(config)
 
 	M.create_commands()
 	M.create_autocommands()
+
+	-- Initialize log module if enabled
+	if config.log_window.enable then
+		log.setup({
+			window = {
+				width = config.log_window.width,
+				height = config.log_window.height,
+				position = config.log_window.position,
+				border = config.log_window.border,
+			},
+			log_args = config.log_window.show_graph and {} or { "--no-graph" },
+			auto_refresh = {
+				enable = config.log_window.auto_refresh,
+				interval = config.log_window.refresh_interval,
+			},
+		})
+	end
 
 	-- Set up key mappings if enabled
 	if type(config.on_attach) == 'function' then
@@ -66,6 +100,17 @@ function M.setup(opts)
 	end
 
 	return M
+end
+
+function M.open_log_window()
+	local dir = fn.expand('%:p:h')
+	local output = utils.system_result({ config.jujutsu_cmd, "log" }, dir)
+
+	if output.exit_code == 0 then
+		utils.show_in_split(output.stdout, "jujutsu-log")
+	else
+		utils.error("Failed to get jujutsu log: " .. output.stderr)
+	end
 end
 
 -- Create user commands
@@ -82,6 +127,17 @@ function M.create_commands()
 	api.nvim_create_user_command('JujutsuToggleNumhl', function() M.toggle_numhl() end, {})
 	api.nvim_create_user_command('JujutsuToggleLinehl', function() M.toggle_linehl() end, {})
 	api.nvim_create_user_command('JujutsuBlame', function() M.blame() end, {})
+
+	-- Add log-related commands
+	if config.log_window.enable then
+		api.nvim_create_user_command('JujutsuLog', function(opts) M.toggle_log_window(opts.args) end,
+			{ nargs = '*' })
+		api.nvim_create_user_command('JujutsuLogToggle', function() M.toggle_log_window() end, {})
+		api.nvim_create_user_command('JujutsuLogOpen', function(opts) M.open_log_window(opts.args) end,
+			{ nargs = '*' })
+		api.nvim_create_user_command('JujutsuLogClose', function() M.close_log_window() end, {})
+		api.nvim_create_user_command('JujutsuLogRefresh', function() M.refresh_log_window() end, {})
+	end
 end
 
 -- Create autocommands
@@ -144,6 +200,7 @@ function M.setup_keymaps()
 	map('n', '<leader>jq', M.squash, "Jujutsu squash changes")
 	map('n', '<leader>je', M.edit, "Jujutsu edit parent")
 	map('n', '<leader>jm', M.describe, "Jujutsu edit commit message")
+	map('n', '<leader>jl', M.open_log_window, "Jujutsu log")
 end
 
 -- Check if the current file is in a jujutsu repo and attach

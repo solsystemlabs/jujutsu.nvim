@@ -1,60 +1,50 @@
 " Vim syntax file
-" Language: Jujutsu output
-" Maintainer: Your Name
-" Latest Revision: 2024-04-07
+" Language: Jujutsu log output
+" Maintainer: Taylor Eernisse
+" Latest Revision: 2025-04-07
 
 if exists("b:current_syntax")
   finish
 endif
 
-" Syntax highlighting for jujutsu status output
-syntax match jujutsuHeader /^Working copy changes:/
-syntax match jujutsuHeader /^Working copy :/
-syntax match jujutsuHeader /^Parent commit:/
+" Syntax highlighting for jujutsu log output
+syntax match jujutsuLogHeader /^Working copy:/
+syntax match jujutsuLogHeader /^Local changes:/
+syntax match jujutsuLogHeader /^Remote changes:/
 
-syntax match jujutsuModified /^M \S\+$/
-syntax match jujutsuAdded /^A \S\+$/
-syntax match jujutsuDeleted /^D \S\+$/
-syntax match jujutsuUntracked /^U \S\+$/
-syntax match jujutsuRenamed /^R \S\+$/
-syntax match jujutsuCopied /^C \S\+$/
+" Commit ID and change ID patterns
+syntax match jujutsuLogCommitID /\<[0-9a-z]\{8,12}\>/
+syntax match jujutsuLogChangeID /\<[a-z]\{8}\>/
+syntax match jujutsuLogWorkingCopy /@/
 
-syntax match jujutsuCommitID /\<[0-9a-f]\{8}\>/
-syntax match jujutsuChangeID /\<[a-z]\{8}\>/
+" Branch and bookmark patterns
+syntax match jujutsuLogBookmark /\S\+@\w\+/
+syntax match jujutsuLogRemote /@\w\+/
 
-syntax match jujutsuBookmark /\S\+@\w\+/
-syntax match jujutsuRemote /@\w\+/
+" Author information
+syntax match jujutsuLogAuthor /\<[^<>]\+<[^<>]\+>/
 
-" Syntax highlighting for jujutsu diff output
-syntax match jujutsuDiffHeader /^diff/
-syntax match jujutsuDiffHunk /^@@ -\d\+,\d\+ +\d\+,\d\+ @@/
-syntax match jujutsuDiffAdd /^+.*$/
-syntax match jujutsuDiffRemove /^-.*$/
+" Graph elements
+syntax match jujutsuLogGraphLine /[|/\\]/ contained
+syntax match jujutsuLogGraphCross /[+*]/ contained
+syntax match jujutsuLogGraph /^.\{-}[|/\\+*]/ contains=jujutsuLogGraphLine,jujutsuLogGraphCross
 
-" Syntax highlighting for jujutsu blame output
-syntax match jujutsuBlameCommitID /^\S\+ \S\+ /
-syntax match jujutsuBlameAuthor /\<[^<>]\+<[^<>]\+>/
+" Date patterns
+syntax match jujutsuLogDate /\d\{4}-\d\{2}-\d\{2}/
+syntax match jujutsuLogTime /\d\{2}:\d\{2}:\d\{2}/
 
 " Define the highlighting
-hi def link jujutsuHeader Title
-hi def link jujutsuModified Identifier
-hi def link jujutsuAdded String
-hi def link jujutsuDeleted Error
-hi def link jujutsuUntracked Comment
-hi def link jujutsuRenamed Type
-hi def link jujutsuCopied Type
+hi def link jujutsuLogHeader Title
+hi def link jujutsuLogCommitID Identifier
+hi def link jujutsuLogChangeID Special
+hi def link jujutsuLogWorkingCopy Question
+hi def link jujutsuLogBookmark Function
+hi def link jujutsuLogRemote Type
+hi def link jujutsuLogAuthor String
+hi def link jujutsuLogGraphLine Comment
+hi def link jujutsuLogGraphCross Comment
+hi def link jujutsuLogGraph Comment
+hi def link jujutsuLogDate PreProc
+hi def link jujutsuLogTime PreProc
 
-hi def link jujutsuCommitID Identifier
-hi def link jujutsuChangeID Special
-hi def link jujutsuBookmark Function
-hi def link jujutsuRemote Type
-
-hi def link jujutsuDiffHeader Title
-hi def link jujutsuDiffHunk Special
-hi def link jujutsuDiffAdd DiffAdd
-hi def link jujutsuDiffRemove DiffDelete
-
-hi def link jujutsuBlameCommitID Identifier
-hi def link jujutsuBlameAuthor String
-
-let b:current_syntax = "jujutsu"
+let b:current_syntax = "jujutsu-log"
