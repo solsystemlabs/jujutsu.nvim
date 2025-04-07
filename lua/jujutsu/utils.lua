@@ -7,7 +7,7 @@ local fn = vim.fn
 
 -- Execute a system command and get result
 function M.system_result(cmd, cwd)
-	cwd = cwd or fn.getcwd()
+	cwd = cwd or vim.fn.getcwd()
 
 	local output = {
 		stdout = "",
@@ -15,12 +15,19 @@ function M.system_result(cmd, cwd)
 		exit_code = 0
 	}
 
+	-- For commands that might produce colorized output, ensure TERM is set
+	local env = {
+		TERM = os.getenv("TERM") or "xterm-256color",
+		COLORTERM = os.getenv("COLORTERM") or "truecolor"
+	}
+
 	-- Use jobstart for async execution
 	local stdout_data = {}
 	local stderr_data = {}
 
-	local jobid = fn.jobstart(cmd, {
+	local jobid = vim.fn.jobstart(cmd, {
 		cwd = cwd,
+		env = env, -- Pass environment variables
 		on_stdout = function(_, data, _)
 			if data then
 				vim.list_extend(stdout_data, data)
@@ -39,7 +46,7 @@ function M.system_result(cmd, cwd)
 	})
 
 	-- Wait for the job to finish
-	fn.jobwait({ jobid })
+	vim.fn.jobwait({ jobid })
 
 	-- Process the output
 	output.stdout = table.concat(stdout_data, "\n")
@@ -108,33 +115,6 @@ function M.parse_diff(diff_text)
 	end
 
 	return hunks
-end
-
--- Show text in a split buffer
-function M.show_in_split(text, filetype)
-	-- Create a new split
-	vim.cmd('botright new')
-
-	local bufnr = api.nvim_get_current_buf()
-
-	-- Set buffer content
-	api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(text, '\n'))
-
-	-- Set buffer options
-	vim.bo[bufnr].buftype = 'nofile'
-	vim.bo[bufnr].bufhidden = 'wipe'
-	vim.bo[bufnr].swapfile = false
-	vim.bo[bufnr].modifiable = false
-
-	-- Set filetype for syntax highlighting
-	if filetype then
-		vim.bo[bufnr].filetype = filetype
-	end
-
-	-- Add key mapping to close the buffer
-	vim.keymap.set('n', 'q', ':bdelete<CR>', { buffer = bufnr, noremap = true, silent = true })
-
-	return bufnr
 end
 
 -- Display an error message
@@ -218,7 +198,80 @@ function M.buf_to_repo_path(bufnr)
 	return abs_path
 end
 
--- Run a jujutsu command and return the result
+-- Display text with ANSI escape sequences in a buffer
+function M.show_ansi_in_buffer(text, title, filetype)
+	-- Create a new split
+	vim.cmd('botright new')
+
+	local bufnr = vim.api.nvim_get_current_buf()
+	local winid = vim.api.nvim_get_current_win()
+
+	-- Set buffer options
+	vim.bo[bufnr].buftype = 'nofile'
+	vim.bo[bufnr].bufhidden = 'wipe'
+	vim.bo[bufnr].swapfile = false
+
+	-- Set buffer name if title is provided
+	if title then
+		vim.api.nvim_buf_set_name(bufnr, title)
+	end
+
+	-- Set filetype if provided (for syntax highlighting)
+	if filetype then
+		vim.bo[bufnr].filetype = filetype
+	end
+
+	-- Create a terminal buffer
+	local term_chan = vim.api.nvim_open_term(bufnr, {})
+
+	-- Send the ANSI-colored text to the terminal
+	vim.api.nvim_chan_send(term_chan, text)
+
+	-- Make buffer read-only
+	vim.bo[bufnr].modifiable = false
+
+	-- Add key mapping to close the buffer with 'q'
+	vim.keymap.set('n', 'q', ':bdelete<CR>', { buffer = bufnr, noremap = true, silent = true })
+
+	-- Return buffer number for possible further manipulation
+	return bufnr
+end
+
+-- Update the show_in_split function to use ANSI colors when available
+function M.show_in_split(text, filetype)
+	-- Check if the text contains ANSI escape sequences
+	if text:find('\27%[') then
+		-- Use the ANSI terminal display method
+		return M.show_ansi_in_buffer(text, 'jujutsu-' .. (filetype or ''), filetype)
+	else
+		-- Original implementation for non-ANSI text
+		-- Create a new split
+		vim.cmd('botright new')
+
+		local bufnr = vim.api.nvim_get_current_buf()
+
+		-- Set buffer content
+		vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(text, '\n'))
+
+		-- Set buffer options
+		vim.bo[bufnr].buftype = 'nofile'
+		vim.bo[bufnr].bufhidden = 'wipe'
+		vim.bo[bufnr].swapfile = false
+		vim.bo[bufnr].modifiable = false
+
+		-- Set filetype for syntax highlighting
+		if filetype then
+			vim.bo[bufnr].filetype = filetype
+		end
+
+		-- Add key mapping to close the buffer
+		vim.keymap.set('n', 'q', ':bdelete<CR>', { buffer = bufnr, noremap = true, silent = true })
+
+		return bufnr
+	end
+end
+
+-- Modify the jujutsu_command function to preserve colors
 function M.jujutsu_command(cmd, args, cwd)
 	if type(cmd) == "string" then
 		cmd = { cmd }
@@ -234,6 +287,20 @@ function M.jujutsu_command(cmd, args, cwd)
 		for _, arg in ipairs(args) do
 			table.insert(cmd, arg)
 		end
+	end
+
+	-- Add --color=always to preserve colors in output
+	-- Only add if not already present
+	local has_color = false
+	for _, arg in ipairs(cmd) do
+		if arg == "--color=always" or arg == "--color" then
+			has_color = true
+			break
+		end
+	end
+
+	if not has_color then
+		table.insert(cmd, "--color=always")
 	end
 
 	return M.system_result(cmd, cwd)

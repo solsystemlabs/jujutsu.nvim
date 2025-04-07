@@ -138,6 +138,38 @@ require('jujutsu').setup({
 })
 ```
 
+## ANSI Color Support
+
+jujutsu.nvim now supports displaying ANSI color codes in Neovim windows. When you run commands like `:JujutsuStatus`, `:JujutsuDiff`, or `:JujutsuBlame`, the plugin will:
+
+1. Request colored output from the jujutsu command with `--color=always`
+2. Detect ANSI escape sequences in the command output
+3. Render the colors properly in the Neovim window using Neovim's built-in terminal features
+
+This provides a rich, colorful experience when viewing jujutsu output directly in your editor, with proper syntax highlighting for:
+
+- Added/removed/modified lines in diffs
+- File status indicators
+- Commit hashes and references
+- Author information
+- And other colored elements from jujutsu's output
+
+### Configuration
+
+Color support is enabled by default. If you'd like to disable it, add the following to your configuration:
+
+```lua
+require('jujutsu').setup({
+  -- Other options...
+
+  ansi_colors = false, -- Set to false to disable ANSI color parsing
+})
+```
+
+### Color Scheme Compatibility
+
+The terminal colors are displayed using Neovim's built-in terminal feature, which respects your terminal's color scheme. This means that the colors should match your terminal's appearance when running jujutsu commands directly.
+
 ## Commands
 
 | Command                     | Description                       |

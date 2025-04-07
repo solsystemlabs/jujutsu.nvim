@@ -12,6 +12,7 @@ local cache = {}
 
 -- Default configuration
 local default_config = {
+	-- Update this in lua/jujutsu/init.lua
 	signs               = {
 		add          = { text = '│' },
 		change       = { text = '│' },
@@ -40,6 +41,7 @@ local default_config = {
 		row = 0,
 		col = 1
 	},
+	ansi_colors         = true, -- Enable or disable ANSI color parsing
 	attach_to_untracked = true,
 	watch_jujutsu       = {
 		interval = 1000,
@@ -133,7 +135,7 @@ function M.create_commands()
 		api.nvim_create_user_command('JujutsuLog', function(opts) M.toggle_log_window(opts.args) end,
 			{ nargs = '*' })
 		api.nvim_create_user_command('JujutsuLogToggle', function() M.toggle_log_window() end, {})
-		api.nvim_create_user_command('JujutsuLogOpen', function(opts) M.open_log_window(opts.args) end,
+		api.nvim_create_user_command('JujutsuLogOpen', function(opts) M.open_log_window() end,
 			{ nargs = '*' })
 		api.nvim_create_user_command('JujutsuLogClose', function() M.close_log_window() end, {})
 		api.nvim_create_user_command('JujutsuLogRefresh', function() M.refresh_log_window() end, {})
@@ -375,9 +377,12 @@ function M.refresh()
 end
 
 -- Show jujutsu status
+-- Update these functions in lua/jujutsu/init.lua
+
+-- Show jujutsu status
 function M.status()
 	local dir = fn.expand('%:p:h')
-	local output = utils.system_result({ config.jujutsu_cmd, "st" }, dir)
+	local output = utils.system_result({ config.jujutsu_cmd, "st", "--color=always" }, dir)
 
 	if output.exit_code == 0 then
 		utils.show_in_split(output.stdout, "jujutsu-status")
@@ -390,7 +395,7 @@ end
 function M.diff(args)
 	args = args or ""
 	local dir = fn.expand('%:p:h')
-	local cmd = { config.jujutsu_cmd, "diff" }
+	local cmd = { config.jujutsu_cmd, "diff", "--color=always" }
 
 	-- Add arguments if provided
 	if args ~= "" then
@@ -405,6 +410,28 @@ function M.diff(args)
 		utils.show_in_split(output.stdout, "jujutsu-diff")
 	else
 		utils.error("Failed to get jujutsu diff: " .. output.stderr)
+	end
+end
+
+-- Show blame for current file
+function M.blame()
+	local dir = fn.expand('%:p:h')
+	local relative_path = fn.expand('%:.')
+
+	-- For jujutsu 0.24+ with file annotate support (similar to git blame)
+	local output = utils.system_result({ config.jujutsu_cmd, "file", "annotate", "--color=always", relative_path },
+		dir)
+
+	if output.exit_code == 0 then
+		utils.show_in_split(output.stdout, "jujutsu-blame")
+	else
+		-- Fallback to log for the file
+		local fallback = utils.system_result({ config.jujutsu_cmd, "log", "--color=always", relative_path }, dir)
+		if fallback.exit_code == 0 then
+			utils.show_in_split(fallback.stdout, "jujutsu-log")
+		else
+			utils.error("Failed to get file history: " .. fallback.stderr)
+		end
 	end
 end
 
@@ -491,27 +518,6 @@ function M.describe()
 		})
 	else
 		utils.error("Failed to get current description: " .. current_desc.stderr)
-	end
-end
-
--- Show blame for current file
-function M.blame()
-	local dir = fn.expand('%:p:h')
-	local relative_path = fn.expand('%:.')
-
-	-- For jujutsu 0.24+ with file annotate support (similar to git blame)
-	local output = utils.system_result({ config.jujutsu_cmd, "file", "annotate", relative_path }, dir)
-
-	if output.exit_code == 0 then
-		utils.show_in_split(output.stdout, "jujutsu-blame")
-	else
-		-- Fallback to log for the file
-		local fallback = utils.system_result({ config.jujutsu_cmd, "log", relative_path }, dir)
-		if fallback.exit_code == 0 then
-			utils.show_in_split(fallback.stdout, "jujutsu-log")
-		else
-			utils.error("Failed to get file history: " .. fallback.stderr)
-		end
 	end
 end
 
@@ -615,6 +621,10 @@ function M.reset_hunk()
 	else
 		utils.error("Failed to reset hunk: " .. output.stderr)
 	end
+end
+
+function M.get_config()
+	return config
 end
 
 return M
