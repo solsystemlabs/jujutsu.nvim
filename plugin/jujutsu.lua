@@ -30,7 +30,6 @@ vim.api.nvim_create_user_command('JujutsuSetup', function(opts)
 end, {
 	nargs = '?',
 	desc = 'Setup jujutsu.nvim with optional configuration',
-	complete = 'lua_code'
 })
 
 -- Setup autocmd for deferred loading
