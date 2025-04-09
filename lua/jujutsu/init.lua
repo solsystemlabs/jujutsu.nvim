@@ -124,9 +124,87 @@ local function edit_change()
 						{ noremap = true, silent = true })
 					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
 						{ noremap = true, silent = true })
+					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+						{ noremap = true, silent = true })
+					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+						{ noremap = true, silent = true })
 				end
 			})
 		end
+	else
+		print("No change ID found on this line")
+	end
+end
+
+-- Function to abandon a change
+local function abandon_change()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = nil
+
+	-- Look for an email address and get the word before it (which should be the change ID)
+	change_id = line:match("([a-z]+)%s+[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+%.[a-zA-Z0-9-.]+")
+
+	-- Check if it's a valid 8-letter change ID
+	if change_id and #change_id ~= 8 then
+		change_id = nil
+	end
+
+	if change_id then
+		-- Remember the current buffer and window
+		local current_buf = vim.api.nvim_get_current_buf()
+		local current_win = vim.api.nvim_get_current_win()
+
+		-- Ask for confirmation before abandoning
+		vim.ui.select(
+			{ "Yes", "No" },
+			{
+				prompt = "Are you sure you want to abandon change " .. change_id .. "?",
+			},
+			function(choice)
+				if choice == "Yes" then
+					-- Run the abandon command
+					local result = vim.fn.system("jj abandon " .. change_id)
+
+					-- Show success message
+					vim.api.nvim_echo({ { "Abandoned change " .. change_id, "Normal" } }, false, {})
+
+					-- Refresh the log content if we're in the log buffer
+					if current_buf == M.log_buf then
+						-- Create a new buffer for log output (to avoid terminal reuse errors)
+						local new_buf = vim.api.nvim_create_buf(false, true) -- Make sure it's empty and scratch
+						-- Set the new buffer in the current window
+						vim.api.nvim_win_set_buf(current_win, new_buf)
+						-- Update the global buffer reference
+						M.log_buf = new_buf
+						-- Run the terminal in the new buffer
+						vim.fn.termopen("jj log", {
+							on_exit = function()
+								-- Switch to normal mode
+								vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+								-- Set buffer as read-only AFTER terminal exits
+								vim.bo[new_buf].modifiable = false
+								vim.bo[new_buf].readonly = true
+								-- Set keymaps
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+									{ noremap = true, silent = true })
+							end
+						})
+					end
+				end
+			end
+		)
 	else
 		print("No change ID found on this line")
 	end
@@ -202,6 +280,10 @@ local function describe_change()
 									{ noremap = true, silent = true })
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
 									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+									{ noremap = true, silent = true })
 							end
 						})
 					end
@@ -213,6 +295,156 @@ local function describe_change()
 		)
 	else
 		print("No change ID found on this line")
+	end
+end
+
+-- Function to create a new change
+local function new_change()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = nil
+
+	-- Look for an email address and get the word before it (which should be the change ID)
+	change_id = line:match("([a-z]+)%s+[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+%.[a-zA-Z0-9-.]+")
+
+	-- Check if it's a valid 8-letter change ID
+	if change_id and #change_id ~= 8 then
+		change_id = nil
+	end
+
+	if change_id then
+		-- Remember the current buffer and window
+		local current_buf = vim.api.nvim_get_current_buf()
+		local current_win = vim.api.nvim_get_current_win()
+
+		-- Ask user for a description for the new change
+		vim.ui.input(
+			{
+				prompt = "Description for new change based on " .. change_id .. ": ",
+				default = "",
+				completion = "file", -- This gives a decent sized input box
+			},
+			function(input)
+				-- If user didn't provide description, use empty string
+				local description = input or ""
+
+				-- Run the new command, optionally with a description
+				local cmd
+				if description ~= "" then
+					cmd = "jj new " .. change_id .. " -m " .. vim.fn.shellescape(description)
+				else
+					cmd = "jj new " .. change_id
+				end
+
+				local result = vim.fn.system(cmd)
+
+				-- Show success message
+				vim.api.nvim_echo({ { "Created new change based on " .. change_id, "Normal" } }, false, {})
+
+				-- Refresh the log content if we're in the log buffer
+				if current_buf == M.log_buf then
+					-- Create a new buffer for log output (to avoid terminal reuse errors)
+					local new_buf = vim.api.nvim_create_buf(false, true) -- Make sure it's empty and scratch
+					-- Set the new buffer in the current window
+					vim.api.nvim_win_set_buf(current_win, new_buf)
+					-- Update the global buffer reference
+					M.log_buf = new_buf
+					-- Run the terminal in the new buffer
+					vim.fn.termopen("jj log", {
+						on_exit = function()
+							-- Switch to normal mode
+							vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+							-- Set buffer as read-only AFTER terminal exits
+							vim.bo[new_buf].modifiable = false
+							vim.bo[new_buf].readonly = true
+							-- Set keymaps
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+								{ noremap = true, silent = true })
+						end
+					})
+				end
+			end
+		)
+	else
+		-- If no change ID was found on the current line, create a new change based on the working copy
+		vim.ui.input(
+			{
+				prompt = "Description for new change: ",
+				default = "",
+				completion = "file", -- This gives a decent sized input box
+			},
+			function(input)
+				-- If user didn't provide description, use empty string
+				local description = input or ""
+
+				-- Run the new command, optionally with a description
+				local cmd
+				if description ~= "" then
+					cmd = "jj new -m " .. vim.fn.shellescape(description)
+				else
+					cmd = "jj new"
+				end
+
+				local result = vim.fn.system(cmd)
+
+				-- Show success message
+				vim.api.nvim_echo({ { "Created new change", "Normal" } }, false, {})
+
+				-- Refresh the log window if needed
+				if M.log_buf and vim.api.nvim_buf_is_valid(M.log_buf) then
+					-- Remember the window ID
+					local win_id = M.log_win
+					if win_id and vim.api.nvim_win_is_valid(win_id) then
+						-- Create a new buffer for log output
+						local new_buf = vim.api.nvim_create_buf(false, true)
+						-- Set the new buffer in the window
+						vim.api.nvim_win_set_buf(win_id, new_buf)
+						-- Update the global buffer reference
+						M.log_buf = new_buf
+						-- Run the terminal in the new buffer
+						vim.fn.termopen("jj log", {
+							on_exit = function()
+								-- Check if window still exists
+								if not vim.api.nvim_win_is_valid(win_id) then
+									return
+								end
+								-- Switch to normal mode
+								vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+								-- Set buffer as read-only AFTER terminal exits
+								vim.bo[new_buf].modifiable = false
+								vim.bo[new_buf].readonly = true
+								-- Set keymaps
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+									{ noremap = true, silent = true })
+							end
+						})
+					end
+				end
+			end
+		)
 	end
 end
 
@@ -271,6 +503,10 @@ function M.toggle_log_window()
 				{ noremap = true, silent = true })
 			vim.api.nvim_buf_set_keymap(buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
 				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
+				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+				{ noremap = true, silent = true })
 		end
 	})
 end
@@ -283,4 +519,6 @@ end
 
 M.edit_change = edit_change
 M.describe_change = describe_change
+M.new_change = new_change
+M.abandon_change = abandon_change
 return M
