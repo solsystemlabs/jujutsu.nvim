@@ -25,21 +25,21 @@ end
 -- Helper function to set keymaps for log buffer
 local function setup_log_buffer_keymaps(buf)
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Edit current change" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Close log window" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Jump to next change" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Jump to previous change" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Edit change description" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Create new change" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Abandon change" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Show status" })
 	-- Add new mappings for enhanced log features
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'l', ':lua require("jujutsu").set_log_limit()<CR>',
 		{ noremap = true, silent = true, desc = "Set log entry limit" })
@@ -54,13 +54,13 @@ end
 -- Helper function to set keymaps for status buffer
 local function setup_status_buffer_keymaps(buf)
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Close status window" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Close status window" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Close status window" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ':lua require("jujutsu").refresh_status()<CR>',
-		{ noremap = true, silent = true })
+		{ noremap = true, silent = true, desc = "Refresh status" })
 end
 
 -- Store the current log settings
@@ -477,9 +477,9 @@ local revset_templates = {
 	{ name = "All commits",                value = "::" },
 	{ name = "Current change ancestors",   value = "::@" },
 	{ name = "Current change descendants", value = "@::" },
-	{ name = "Recent commits (last 10)",   value = "::@ & arg:1",                 description = "Ancestors of @ limited to 10" },
-	{ name = "Current branch only",        value = "(master..@):: | (master..@)-" },
-	{ name = "Modified files",             value = "file:",                       description = "Uses files() function to filter by path" },
+	{ name = "Recent commits (last 10)",   value = "::@ & arg:1",             description = "Ancestors of @ limited to 10" },
+	{ name = "Current branch only",        value = "(main..@):: | (main..@)-" },
+	{ name = "Modified files",             value = "file:",                   description = "Uses files() function to filter by path" },
 	{ name = "Custom revset",              value = "CUSTOM" }
 }
 
@@ -777,20 +777,20 @@ function M.toggle_log_window()
 end
 
 function M.setup()
-	-- Changed to use 'j' namespace for global hotkeys
+	-- Changed to use 'j' namespace for global hotkeys with descriptive comments for WhichKey
 	vim.keymap.set('n', '<leader>jl', function()
 		M.toggle_log_window()
-	end)
+	end, { desc = "Toggle Jujutsu log window" })
 
 	-- Added global mapping for showing status
 	vim.keymap.set('n', '<leader>js', function()
 		M.show_status()
-	end)
+	end, { desc = "Show Jujutsu status" })
 
 	-- Add a mapping for resetting log settings
 	vim.keymap.set('n', '<leader>jr', function()
 		M.reset_log_settings()
-	end)
+	end, { desc = "Reset Jujutsu log settings" })
 
 	-- Add mapping for advanced log options
 	vim.keymap.set('n', '<leader>jo', function()
@@ -819,7 +819,7 @@ function M.setup()
 				end
 			end
 		)
-	end)
+	end, { desc = "Jujutsu log options" })
 end
 
 M.edit_change = edit_change
