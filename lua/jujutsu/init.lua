@@ -73,6 +73,7 @@ local function find_next_change_line(direction)
 	end
 end
 
+-- Function to edit change with jj edit command
 local function edit_change()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = nil
@@ -121,9 +122,95 @@ local function edit_change()
 						{ noremap = true, silent = true })
 					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
 						{ noremap = true, silent = true })
+					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+						{ noremap = true, silent = true })
 				end
 			})
 		end
+	else
+		print("No change ID found on this line")
+	end
+end
+
+-- Function to add or edit change description
+local function describe_change()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = nil
+
+	-- Look for an email address and get the word before it (which should be the change ID)
+	change_id = line:match("([a-z]+)%s+[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+%.[a-zA-Z0-9-.]+")
+
+	-- Check if it's a valid 8-letter change ID
+	if change_id and #change_id ~= 8 then
+		change_id = nil
+	end
+
+	if change_id then
+		-- Remember the current buffer and window
+		local current_buf = vim.api.nvim_get_current_buf()
+		local current_win = vim.api.nvim_get_current_win()
+
+		-- Use a plain format to get just the raw description text without any formatting
+		local description = vim.fn.system("jj log -r " .. change_id .. " --no-graph -T 'description'")
+
+		-- Trim whitespace
+		description = description:gsub("^%s*(.-)%s*$", "%1")
+
+		-- Replace newlines with spaces to avoid the error with snacks.nvim
+		description = description:gsub("\n", " ")
+
+		-- Use vim.ui.input() for simple input at the bottom of the screen
+		vim.ui.input(
+			{
+				prompt = "Description for " .. change_id .. ": ",
+				default = description,
+				completion = "file", -- This gives a decent sized input box
+			},
+			function(input)
+				if input then -- If not cancelled (ESC)
+					-- Run the describe command
+					local cmd = "jj describe " .. change_id .. " -m " .. vim.fn.shellescape(input)
+					local result = vim.fn.system(cmd)
+
+					-- Show success message
+					vim.api.nvim_echo({ { "Updated description for change " .. change_id, "Normal" } }, false, {})
+
+					-- Refresh the log content if we're in the log buffer
+					if current_buf == M.log_buf then
+						-- Create a new buffer for log output (to avoid terminal reuse errors)
+						local new_buf = vim.api.nvim_create_buf(false, true) -- Make sure it's empty and scratch
+						-- Set the new buffer in the current window
+						vim.api.nvim_win_set_buf(current_win, new_buf)
+						-- Update the global buffer reference
+						M.log_buf = new_buf
+						-- Run the terminal in the new buffer
+						vim.fn.termopen("jj log", {
+							on_exit = function()
+								-- Switch to normal mode
+								vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+								-- Set buffer as read-only AFTER terminal exits
+								vim.bo[new_buf].modifiable = false
+								vim.bo[new_buf].readonly = true
+								-- Set keymaps
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+									{ noremap = true, silent = true })
+							end
+						})
+					end
+				else
+					-- Show cancel message if the user pressed ESC
+					vim.api.nvim_echo({ { "Description edit cancelled", "Normal" } }, false, {})
+				end
+			end
+		)
 	else
 		print("No change ID found on this line")
 	end
@@ -136,9 +223,6 @@ end
 function M.jump_prev_change()
 	find_next_change_line("prev")
 end
-
--- Track the window ID that contains the log buffer
-M.log_win = nil
 
 function M.toggle_log_window()
 	-- Check if log window exists and is valid
@@ -185,6 +269,8 @@ function M.toggle_log_window()
 				{ noremap = true, silent = true })
 			vim.api.nvim_buf_set_keymap(buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
 				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
+				{ noremap = true, silent = true })
 		end
 	})
 end
@@ -196,4 +282,5 @@ function M.setup()
 end
 
 M.edit_change = edit_change
+M.describe_change = describe_change
 return M
