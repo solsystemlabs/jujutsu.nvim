@@ -1,6 +1,8 @@
 local M = {}
 -- Track the buffer ID
 M.log_buf = nil
+-- Track if the window is already open
+M.is_window_open = false
 
 local function edit_change()
 	local line = vim.api.nvim_get_current_line()
@@ -67,8 +69,30 @@ local function edit_change()
 	end
 end
 
+-- Function to check if the log window exists and is valid
+local function is_log_window_valid()
+	-- Check if buffer exists and is valid
+	if M.log_buf and vim.api.nvim_buf_is_valid(M.log_buf) then
+		-- Check if buffer is loaded in any window
+		local windows = vim.api.nvim_list_wins()
+		for _, win in ipairs(windows) do
+			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == M.log_buf then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function M.setup()
 	vim.keymap.set('n', '<leader>l', function()
+		-- Check if window is already open
+		if is_log_window_valid() then
+			-- Window already exists, do nothing
+			vim.api.nvim_echo({ { "Jujutsu log window already open", "WarningMsg" } }, false, {})
+			return
+		end
+
 		-- Create a split window
 		vim.cmd("botright vsplit")
 		-- Create a new scratch buffer
