@@ -10,25 +10,27 @@ local function find_next_change_line(direction)
 	local line_count = vim.api.nvim_buf_line_count(0)
 	local found_line = nil
 
-	-- Function to check if a line has a valid change ID
-	local function has_change_id(line)
-		if not line then return false end
+	-- Function to extract a change ID from a line, if it exists
+	local function extract_change_id(line)
+		if not line then return nil end
 
-		-- Split the line by spaces
-		local parts = {}
-		for part in line:gmatch("%S+") do
-			table.insert(parts, part)
+		-- Look for an email address and get the word before it (which should be the change ID)
+		-- Pattern to match: word followed by email
+		local id = line:match("([a-z]+)%s+[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+%.[a-zA-Z0-9-.]+")
+
+		-- Check if it's a valid 8-letter change ID
+		if id and #id == 8 then
+			return id
 		end
 
-		-- Check if the second part is an 8-letter change ID
-		return #parts >= 2 and parts[2]:match("^%a+$") and #parts[2] == 8
+		return nil
 	end
 
 	if direction == "next" then
 		-- Search downward from current line
 		for i = current_line + 1, line_count do
 			local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-			if has_change_id(line) then
+			if extract_change_id(line) then
 				found_line = i
 				break
 			end
@@ -38,7 +40,7 @@ local function find_next_change_line(direction)
 		if not found_line then
 			for i = 1, current_line - 1 do
 				local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-				if has_change_id(line) then
+				if extract_change_id(line) then
 					found_line = i
 					break
 				end
@@ -48,7 +50,7 @@ local function find_next_change_line(direction)
 		-- Search upward from current line
 		for i = current_line - 1, 1, -1 do
 			local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-			if has_change_id(line) then
+			if extract_change_id(line) then
 				found_line = i
 				break
 			end
@@ -58,7 +60,7 @@ local function find_next_change_line(direction)
 		if not found_line then
 			for i = line_count, current_line + 1, -1 do
 				local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-				if has_change_id(line) then
+				if extract_change_id(line) then
 					found_line = i
 					break
 				end
@@ -75,26 +77,12 @@ local function edit_change()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = nil
 
-	-- Split the line by spaces and check the second element
-	local parts = {}
-	for part in line:gmatch("%S+") do
-		table.insert(parts, part)
-	end
+	-- Look for an email address and get the word before it (which should be the change ID)
+	change_id = line:match("([a-z]+)%s+[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+%.[a-zA-Z0-9-.]+")
 
-	-- Check if we have at least 2 elements and the second looks like a jj change ID
-	-- (typically 8 lowercase letters with no numbers)
-	if #parts >= 2 and parts[2]:match("^%a+$") and #parts[2] == 8 then
-		change_id = parts[2]
-	end
-
-	-- If we didn't find it in the expected position, try to find any 8-letter word
-	if not change_id then
-		for _, part in ipairs(parts) do
-			if part:match("^%a+$") and #part == 8 then
-				change_id = part
-				break
-			end
-		end
+	-- Check if it's a valid 8-letter change ID
+	if change_id and #change_id ~= 8 then
+		change_id = nil
 	end
 
 	if change_id then
