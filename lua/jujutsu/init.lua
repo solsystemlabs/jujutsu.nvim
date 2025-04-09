@@ -3,6 +3,9 @@ local M = {}
 M.log_buf = nil
 -- Track the window ID that contains the log buffer
 M.log_win = nil
+-- Track the status buffer and window IDs
+M.status_buf = nil
+M.status_win = nil
 
 -- Find the next line with a change ID
 local function find_next_change_line(direction)
@@ -73,6 +76,113 @@ local function find_next_change_line(direction)
 	end
 end
 
+-- Function to show status in a floating window
+local function show_status()
+	-- Close existing status window if it exists
+	if M.status_win and vim.api.nvim_win_is_valid(M.status_win) then
+		vim.api.nvim_win_close(M.status_win, true)
+		M.status_win = nil
+		M.status_buf = nil
+		return
+	end
+
+	-- Create a new scratch buffer
+	local buf = vim.api.nvim_create_buf(false, true)
+	M.status_buf = buf
+
+	-- Set buffer name/title
+	vim.api.nvim_buf_set_name(buf, "JJ Status")
+
+	-- Calculate window size and position - made smaller
+	local width = math.floor(vim.o.columns * 0.6) -- Reduced from 0.8
+	local height = math.floor(vim.o.lines * 0.5) -- Reduced from 0.8
+	local col = math.floor((vim.o.columns - width) / 2)
+	local row = math.floor((vim.o.lines - height) / 2)
+
+	-- Create floating window
+	local win_opts = {
+		relative = "editor",
+		width = width,
+		height = height,
+		col = col,
+		row = row,
+		style = "minimal",
+		border = "rounded"
+	}
+
+	M.status_win = vim.api.nvim_open_win(buf, true, win_opts)
+
+	-- Run jj st in a terminal
+	vim.fn.termopen("jj st", {
+		on_exit = function()
+			-- Check if window still exists
+			if not vim.api.nvim_win_is_valid(M.status_win) then
+				return
+			end
+			-- Switch to normal mode
+			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+			-- Set buffer as read-only
+			vim.bo[buf].modifiable = false
+			vim.bo[buf].readonly = true
+			-- Set keymaps - added Escape and Enter to close the window
+			vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").close_status_window()<CR>',
+				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', ':lua require("jujutsu").close_status_window()<CR>',
+				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', ':lua require("jujutsu").close_status_window()<CR>',
+				{ noremap = true, silent = true })
+			-- Add keymaps to refresh the status
+			vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ':lua require("jujutsu").refresh_status()<CR>',
+				{ noremap = true, silent = true })
+		end
+	})
+end
+
+-- Function to close the status window
+local function close_status_window()
+	if M.status_win and vim.api.nvim_win_is_valid(M.status_win) then
+		vim.api.nvim_win_close(M.status_win, true)
+		M.status_win = nil
+		M.status_buf = nil
+	end
+end
+
+-- Function to refresh the status window
+local function refresh_status()
+	if M.status_win and vim.api.nvim_win_is_valid(M.status_win) then
+		-- Remember the window ID
+		local win_id = M.status_win
+		-- Create a new buffer
+		local new_buf = vim.api.nvim_create_buf(false, true)
+		-- Set the buffer in the window
+		vim.api.nvim_win_set_buf(win_id, new_buf)
+		-- Update the buffer reference
+		M.status_buf = new_buf
+		-- Run jj st again
+		vim.fn.termopen("jj st", {
+			on_exit = function()
+				-- Check if window still exists
+				if not vim.api.nvim_win_is_valid(win_id) then
+					return
+				end
+				-- Switch to normal mode
+				vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+				-- Set buffer as read-only
+				vim.bo[new_buf].modifiable = false
+				vim.bo[new_buf].readonly = true
+				-- Set keymaps
+				vim.api.nvim_buf_set_keymap(new_buf, 'n', 'q', ':lua require("jujutsu").close_status_window()<CR>',
+					{ noremap = true, silent = true })
+				vim.api.nvim_buf_set_keymap(new_buf, 'n', 'r', ':lua require("jujutsu").refresh_status()<CR>',
+					{ noremap = true, silent = true })
+			end
+		})
+	else
+		-- If window doesn't exist, create a new one
+		show_status()
+	end
+end
+
 -- Function to edit change with jj edit command
 local function edit_change()
 	local line = vim.api.nvim_get_current_line()
@@ -128,6 +238,7 @@ local function edit_change()
 						{ noremap = true, silent = true })
 					vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
 						{ noremap = true, silent = true })
+					-- Removed 's' key mapping from log window
 				end
 			})
 		end
@@ -199,6 +310,7 @@ local function abandon_change()
 									{ noremap = true, silent = true })
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
 									{ noremap = true, silent = true })
+								-- Removed 's' key mapping
 							end
 						})
 					end
@@ -283,6 +395,8 @@ local function describe_change()
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
 									{ noremap = true, silent = true })
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
 									{ noremap = true, silent = true })
 							end
 						})
@@ -371,6 +485,8 @@ local function new_change()
 								{ noremap = true, silent = true })
 							vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
 								{ noremap = true, silent = true })
+							vim.api.nvim_buf_set_keymap(new_buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
+								{ noremap = true, silent = true })
 						end
 					})
 				end
@@ -438,6 +554,8 @@ local function new_change()
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
 									{ noremap = true, silent = true })
 								vim.api.nvim_buf_set_keymap(new_buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
+									{ noremap = true, silent = true })
+								vim.api.nvim_buf_set_keymap(new_buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
 									{ noremap = true, silent = true })
 							end
 						})
@@ -507,13 +625,21 @@ function M.toggle_log_window()
 				{ noremap = true, silent = true })
 			vim.api.nvim_buf_set_keymap(buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
 				{ noremap = true, silent = true })
+			vim.api.nvim_buf_set_keymap(buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
+				{ noremap = true, silent = true })
 		end
 	})
 end
 
 function M.setup()
-	vim.keymap.set('n', '<leader>l', function()
+	-- Changed to use 'j' namespace for global hotkeys
+	vim.keymap.set('n', '<leader>jl', function()
 		M.toggle_log_window()
+	end)
+
+	-- Added global mapping for showing status
+	vim.keymap.set('n', '<leader>js', function()
+		M.show_status()
 	end)
 end
 
@@ -521,4 +647,7 @@ M.edit_change = edit_change
 M.describe_change = describe_change
 M.new_change = new_change
 M.abandon_change = abandon_change
+M.show_status = show_status
+M.close_status_window = close_status_window
+M.refresh_status = refresh_status
 return M
