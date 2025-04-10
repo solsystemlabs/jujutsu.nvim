@@ -23,11 +23,18 @@ function M.refresh_log()
 	end
 end
 
--- Setup global keymaps... (unchanged)
+-- Setup global keymaps
 function M.setup()
-	vim.keymap.set('n', '<leader>jl', function() Log.toggle_log_window() end, { desc = "[J]ujutsu [L]og Toggle" })
-	vim.keymap.set('n', '<leader>js', function() Status.show_status() end, { desc = "[J]ujutsu [S]tatus Show" })
-	vim.keymap.set('n', '<leader>jr', function() Log.reset_log_settings() end, { desc = "[J]ujutsu Log [R]eset Settings" })
+	-- Define options once
+	local opts = { noremap = true, silent = true }
+
+	-- Existing mappings
+	vim.keymap.set('n', '<leader>jl', function() Log.toggle_log_window() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu [L]og Toggle" }, opts))
+	vim.keymap.set('n', '<leader>js', function() Status.show_status() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu [S]tatus Show" }, opts))
+	vim.keymap.set('n', '<leader>jr', function() Log.reset_log_settings() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu Log [R]eset Settings" }, opts))
 	vim.keymap.set('n', '<leader>jo', function()
 		vim.ui.select({ "Set Limit", "Set Revset Filter", "Search in Log", "Change Template", "Reset Settings" },
 			{ prompt = "Select a Jujutsu log option:", },
@@ -45,8 +52,13 @@ function M.setup()
 					Log.reset_log_settings()
 				end
 			end)
-	end, { desc = "[J]ujutsu Log [O]ptions" })
-	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end, { desc = "[J]ujutsu [C]ommit Change" })
+	end, vim.tbl_extend('keep', { desc = "[J]ujutsu Log [O]ptions" }, opts))
+	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu [C]ommit Change" }, opts))
+
+	-- *** NEW: Git Push Mapping ***
+	vim.keymap.set('n', '<leader>jp', function() Commands.git_push() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu Git [P]ush" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -67,13 +79,14 @@ M.commit_change = Commands.commit_change
 M.close_status_window = Status.close_status_window
 M.refresh_status = Status.refresh_status
 M.reset_log_settings = Log.reset_log_settings
-M.toggle_log_help = Log.toggle_help_window -- Keep help toggle exposed
+M.toggle_log_help = Log.toggle_help_window
 M.close_log_help = Log.close_help_window
-
--- *** ADDED: Expose bookmark functions ***
 M.create_bookmark = Commands.create_bookmark
 M.delete_bookmark = Commands.delete_bookmark
 M.move_bookmark = Commands.move_bookmark
+
+-- *** NEW: Expose git_push function ***
+M.git_push = Commands.git_push
 
 
 -- Return the main module table M
