@@ -26,8 +26,10 @@ local log_keymaps_info = {
 	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
 	{ key = "bd", desc = "[B]ookmark [D]elete..." },
 	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
-	-- *** NEW: Push Keymap ***
 	{ key = "p",  desc = "Push changes (jj git push)" },
+	-- *** NEW: Squash & Refresh Keymaps ***
+	{ key = "S",  desc = "[S]quash changes interactively (jj squash -i)" },
+	{ key = "R",  desc = "[R]efresh log view" },
 }
 
 local revset_templates = {
@@ -129,8 +131,10 @@ local function setup_log_buffer_keymaps(buf)
 	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
 	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
-	-- *** NEW: Push Mapping ***
 	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
+	-- *** NEW: Squash & Refresh Mappings ***
+	map('S', ':lua require("jujutsu").squash_interactive()<CR>', "[S]quash changes interactively (jj squash -i)")
+	map('R', ':lua require("jujutsu").refresh_log()<CR>', "[R]efresh log view")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
