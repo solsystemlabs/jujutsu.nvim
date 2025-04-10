@@ -9,22 +9,17 @@ local Utils = require("jujutsu.utils")
 local M_ref = nil
 
 -- Execute a jj command and refresh log if necessary
--- (Make sure this function is the robust version from previous steps)
+-- (Unchanged from previous version)
 local function execute_jj_command(command_parts, success_message, refresh_log)
 	if type(command_parts) ~= "table" then
 		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
-		return
+		return false -- Indicate failure
 	end
-
 	local command_str = table.concat(command_parts, " ")
 	vim.fn.system(command_parts) -- Execute silently
-
 	if vim.v.shell_error ~= 0 then
 		local err_output = vim.fn.system(command_str .. " 2>&1")
-		local msg_chunks = {
-			{ "Error executing: ",                          "ErrorMsg" },
-			{ (command_str or "<missing command>") .. "\n", "Code" }
-		}
+		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
 		local error_text
 		if err_output == nil then
 			error_text = "(No error output captured)"
@@ -35,45 +30,37 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		else
 			error_text = err_output
 		end
-		error_text = error_text:gsub("[\n\r]+$", "") -- Remove trailing newlines/CR
+		error_text = error_text:gsub("[\n\r]+$", "")
 		table.insert(msg_chunks, { error_text, "ErrorMsg" })
 		vim.api.nvim_echo(msg_chunks, true, {})
-		return
+		return false -- Indicate failure
 	end
-
 	if success_message then vim.api.nvim_echo({ { success_message, "Normal" } }, false, {}) end
 	if refresh_log then M_ref.refresh_log() end
+	return true -- Indicate success
 end
 
-
 -- Helper function to get existing bookmark names
+-- (Unchanged from previous version with gsub fix)
 local function get_bookmark_names()
 	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
 	if vim.v.shell_error ~= 0 then
-		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
-		return nil -- Indicate error
+		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {}); return nil
 	end
 	local names = {}
-	-- Expected format: "name: change_id (description)" or just "name: change_id"
 	for _, line in ipairs(output) do
-		local name = line:match("^([^:]+):") -- Match everything before the first colon
-		if name then
-			-- *** Fix: Add parentheses around gsub call ***
-			-- This ensures only the first return value (the string) is passed to insert
-			table.insert(names, (name:gsub("%s+$", ""))) -- Trim trailing whitespace from name
-		end
+		local name = line:match("^([^:]+):")
+		if name then table.insert(names, (name:gsub("%s+$", ""))) end -- Parentheses fix included
 	end
 	return names
 end
 
-
--- Function to create a bookmark
+-- Function to create a bookmark (Unchanged)
 function Commands.create_bookmark()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
 	if not change_id then
-		vim.api.nvim_echo({ { "No change ID found on this line to bookmark.", "WarningMsg" } }, false, {})
-		return
+		vim.api.nvim_echo({ { "No change ID found on this line to bookmark.", "WarningMsg" } }, false, {}); return
 	end
 	vim.ui.input({ prompt = "Bookmark name to create: " }, function(name)
 		if name ~= nil and name ~= "" then
@@ -87,18 +74,17 @@ function Commands.create_bookmark()
 	end)
 end
 
--- Function to delete a bookmark
+-- Function to delete a bookmark (Unchanged - uses vim.ui.select for confirm)
 function Commands.delete_bookmark()
 	local bookmark_names = get_bookmark_names()
 	if bookmark_names == nil then return end
 	if not bookmark_names or #bookmark_names == 0 then
-		vim.api.nvim_echo({ { "No bookmarks found to delete.", "Normal" } }, false, {})
-		return
+		vim.api.nvim_echo({ { "No bookmarks found to delete.", "Normal" } }, false, {}); return
 	end
 	vim.ui.select(bookmark_names, { prompt = "Select bookmark to delete:" }, function(selected_name)
 		if selected_name then
-			vim.ui.confirm("Delete bookmark '" .. selected_name .. "'?", function(confirmed)
-				if confirmed == true then
+			vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
+				if choice == "Yes" then
 					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
 						true)
 				else
@@ -111,15 +97,18 @@ function Commands.delete_bookmark()
 	end)
 end
 
--- Function to move (set) a bookmark
+-- *** MODIFIED: Function to move (set) a bookmark with CORRECT backward check ***
 function Commands.move_bookmark()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
+
 	if not change_id then
 		vim.api.nvim_echo({ { "No change ID found on this line to move bookmark to.", "WarningMsg" } }, false, {})
 		return
 	end
+
 	local existing_bookmarks = get_bookmark_names() or {}
+
 	vim.ui.input({
 		prompt = "Bookmark name to create/move: ",
 		completion = function(arg_lead)
@@ -128,19 +117,80 @@ function Commands.move_bookmark()
 			return matches
 		end
 	}, function(name)
-		if name ~= nil and name ~= "" then
-			execute_jj_command({ "jj", "bookmark", "set", name, "-r", change_id },
-				"Bookmark '" .. name .. "' set to " .. change_id, true)
-		elseif name == "" then
-			vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
+		if name == nil then
+			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {}); return
+		end
+		if name == "" then
+			vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {}); return
+		end
+
+		-- Attempt 1: Try moving without the flag, capture output
+		local cmd_parts_attempt1 = { "jj", "bookmark", "set", name, "-r", change_id }
+		local cmd_str_attempt1 = table.concat(cmd_parts_attempt1, " ")
+		local output = vim.fn.system(cmd_str_attempt1 .. " 2>&1") -- Capture stdout and stderr
+		local shell_error_code = vim.v.shell_error              -- Capture error code immediately
+		local success = (shell_error_code == 0)
+
+		if success then
+			-- First attempt succeeded
+			vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {})
+			M_ref.refresh_log() -- Refresh log on success
 		else
-			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+			-- First attempt failed, check stderr for the specific backward move error
+			local backward_error_found = false
+			if output and type(output) == "string" then
+				-- *** FIX: Search for the CORRECT phrase from the error message ***
+				-- Make it case-insensitive and use plain search
+				if output:lower():find("refusing to move bookmark backwards", 1, true) then
+					backward_error_found = true
+				end
+			end
+
+			if backward_error_found then
+				-- Specific error found, prompt user
+				vim.ui.select({ "Yes", "No" }, { prompt = "Allow moving bookmark '" .. name .. "' backward?" }, function(choice)
+					if choice == "Yes" then
+						-- Attempt 2: User confirmed, add the flag and use execute_jj_command
+						-- Note: jj uses --allow-backwards (plural) according to the hint
+						local cmd_parts_attempt2 = { "jj", "bookmark", "set", "--allow-backwards", name, "-r", change_id }
+						-- Let execute_jj_command handle success/error reporting for the second try
+						execute_jj_command(
+							cmd_parts_attempt2,
+							"Bookmark '" .. name .. "' set backward to " .. change_id,
+							true -- Refresh log
+						)
+					else
+						-- User selected No or cancelled
+						vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+					end
+				end)
+			else
+				-- First attempt failed for a different reason, show the captured error
+				local msg_chunks = {
+					{ "Error executing: ",      "ErrorMsg" },
+					{ cmd_str_attempt1 .. "\n", "Code" }
+				}
+				local error_text
+				if output == nil then
+					error_text = "(No error output captured)"
+				elseif type(output) ~= "string" then
+					error_text = "(Non-string error output: " .. type(output) .. ")"
+				elseif output == "" then
+					error_text = "(Empty error output, shell error code: " ..
+							shell_error_code .. ")" -- Add error code info
+				else
+					error_text = output
+				end
+				error_text = error_text:gsub("[\n\r]+$", "")
+				table.insert(msg_chunks, { error_text, "ErrorMsg" })
+				vim.api.nvim_echo(msg_chunks, true, {})
+			end
 		end
 	end)
 end
 
 -- Existing command functions (edit_change, abandon_change, describe_change, etc.)
--- ... (ensure they are present) ...
+-- ... (ensure they are present and correct) ...
 function Commands.edit_change()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
