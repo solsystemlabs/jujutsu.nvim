@@ -10,19 +10,15 @@ local M_ref = nil
 
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
--- (This function remains unchanged - it prints success_message or error output)
+-- (Unchanged)
 local function execute_jj_command(command_parts, success_message, refresh_log)
 	if type(command_parts) ~= "table" then
 		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
 		return false -- Indicate failure
 	end
-
 	local command_str = table.concat(command_parts, " ")
-	-- Execute silently using vim.fn.system
-	vim.fn.system(command_parts)
-
+	vim.fn.system(command_parts) -- Execute silently
 	if vim.v.shell_error ~= 0 then
-		-- Error occurred, try to capture stderr for the message
 		local err_output = vim.fn.system(command_str .. " 2>&1")
 		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
 		local error_text
@@ -35,23 +31,18 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		else
 			error_text = err_output
 		end
-		error_text = error_text:gsub("[\n\r]+$", "") -- Remove trailing newlines/CR
+		error_text = error_text:gsub("[\n\r]+$", "")
 		table.insert(msg_chunks, { error_text, "ErrorMsg" })
-		vim.api.nvim_echo(msg_chunks, true, {})    -- true forces redraw
-		return false                               -- Indicate failure
+		vim.api.nvim_echo(msg_chunks, true, {})
+		return false -- Indicate failure
 	end
-
-	-- If no error: Show success message
-	if success_message then
-		vim.api.nvim_echo({ { success_message, "Normal" } }, false, {})
-	end
-	-- Optional log refresh
+	if success_message then vim.api.nvim_echo({ { success_message, "Normal" } }, false, {}) end
 	if refresh_log then
-		-- Ensure M_ref is initialized before calling refresh_log
 		if M_ref and M_ref.refresh_log then
 			M_ref.refresh_log()
 		else
-			vim.api.nvim_echo({ { "Internal Error: M_ref not initialized for refresh.", "ErrorMsg" } }, true, {})
+			vim.api.nvim_echo(
+				{ { "Internal Error: M_ref not initialized for refresh.", "ErrorMsg" } }, true, {})
 		end
 	end
 	return true -- Indicate success
@@ -73,57 +64,48 @@ local function get_bookmark_names()
 end
 
 
--- *** MODIFIED: Function to run jj git push and display its output ***
+-- *** MODIFIED: Function to run jj git push and display output via vim.notify ***
 function Commands.git_push()
 	local cmd_parts = { "jj", "git", "push" }
 	local cmd_str = table.concat(cmd_parts, " ")
 
-	-- Run the command and capture combined stdout/stderr
-	-- Use systemlist to handle multi-line output better
-	vim.api.nvim_echo({ { "Running: " .. cmd_str .. "...", "Comment" } }, false, {}) -- Indicate start
+	-- Indicate start via notify (optional, can be removed)
+	vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+	-- Run the command and capture combined stdout/stderr using systemlist
 	local output_lines = vim.fn.systemlist(cmd_str .. " 2>&1")
 	local shell_error_code = vim.v.shell_error
 	local success = (shell_error_code == 0)
 
+	-- Combine output lines into a single string for notify message body
+	local output_string = table.concat(output_lines, "\n")
+	output_string = output_string:gsub("[\n\r]+$", "") -- Trim trailing newline
+
 	if success then
-		-- Command succeeded, display captured output (stdout)
-		if #output_lines > 0 then
-			-- Format output nicely for nvim_echo (one chunk per line)
-			local msg_chunks = {}
-			for _, line in ipairs(output_lines) do
-				table.insert(msg_chunks, { line .. "\n" }) -- Add newline for readability
-			end
-			-- Remove trailing newline from the very last chunk
-			if #msg_chunks > 0 and msg_chunks[#msg_chunks][1]:sub(-1) == "\n" then
-				msg_chunks[#msg_chunks][1] = msg_chunks[#msg_chunks][1]:sub(1, -2)
-			end
-			vim.api.nvim_echo(msg_chunks, false, {}) -- Show output
+		-- Command succeeded
+		local message
+		if output_string ~= "" then
+			message = output_string
 		else
-			-- Command succeeded but produced no output
-			vim.api.nvim_echo({ { "jj git push completed successfully (no output).", "Normal" } }, false, {})
+			message = "jj git push completed successfully (no output)."
 		end
+		-- Display success output as INFO level notification
+		vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
+
 		-- Refresh log on success
 		if M_ref and M_ref.refresh_log then
 			M_ref.refresh_log()
 		end
 	else
-		-- Command failed, display captured output (stderr) as an error
-		local msg_chunks = {
-			{ "Error executing: ", "ErrorMsg" },
-			{ cmd_str .. "\n",     "Code" }
-		}
-		if #output_lines > 0 then
-			for _, line in ipairs(output_lines) do
-				table.insert(msg_chunks, { line .. "\n", "ErrorMsg" }) -- Add error lines
-			end
-			-- Remove trailing newline from the very last chunk
-			if msg_chunks[#msg_chunks][1]:sub(-1) == "\n" then
-				msg_chunks[#msg_chunks][1] = msg_chunks[#msg_chunks][1]:sub(1, -2)
-			end
+		-- Command failed
+		local error_message
+		if output_string ~= "" then
+			error_message = output_string
 		else
-			table.insert(msg_chunks, { "(No error output captured, shell error: " .. shell_error_code .. ")", "ErrorMsg" })
+			error_message = "(No error output captured, shell error: " .. shell_error_code .. ")"
 		end
-		vim.api.nvim_echo(msg_chunks, true, {}) -- Show error, force redraw
+		-- Display failure output as ERROR level notification
+		vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
 	end
 end
 
