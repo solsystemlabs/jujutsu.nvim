@@ -10,6 +10,7 @@ local M_ref = nil
 
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
+-- (This function remains unchanged - it prints success_message or error output)
 local function execute_jj_command(command_parts, success_message, refresh_log)
 	if type(command_parts) ~= "table" then
 		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
@@ -72,14 +73,58 @@ local function get_bookmark_names()
 end
 
 
--- Function to run jj git push
+-- *** MODIFIED: Function to run jj git push and display its output ***
 function Commands.git_push()
-	-- Call the helper function to execute the command
-	-- Provide a success message
-	-- *** MODIFIED: Set refresh_log to true ***
-	execute_jj_command({ "jj", "git", "push" }, "jj git push command executed.", true)
-	-- Note: Success message only indicates the command exited cleanly (exit code 0).
-	-- Detailed push status/errors would have been printed by execute_jj_command on failure.
+	local cmd_parts = { "jj", "git", "push" }
+	local cmd_str = table.concat(cmd_parts, " ")
+
+	-- Run the command and capture combined stdout/stderr
+	-- Use systemlist to handle multi-line output better
+	vim.api.nvim_echo({ { "Running: " .. cmd_str .. "...", "Comment" } }, false, {}) -- Indicate start
+	local output_lines = vim.fn.systemlist(cmd_str .. " 2>&1")
+	local shell_error_code = vim.v.shell_error
+	local success = (shell_error_code == 0)
+
+	if success then
+		-- Command succeeded, display captured output (stdout)
+		if #output_lines > 0 then
+			-- Format output nicely for nvim_echo (one chunk per line)
+			local msg_chunks = {}
+			for _, line in ipairs(output_lines) do
+				table.insert(msg_chunks, { line .. "\n" }) -- Add newline for readability
+			end
+			-- Remove trailing newline from the very last chunk
+			if #msg_chunks > 0 and msg_chunks[#msg_chunks][1]:sub(-1) == "\n" then
+				msg_chunks[#msg_chunks][1] = msg_chunks[#msg_chunks][1]:sub(1, -2)
+			end
+			vim.api.nvim_echo(msg_chunks, false, {}) -- Show output
+		else
+			-- Command succeeded but produced no output
+			vim.api.nvim_echo({ { "jj git push completed successfully (no output).", "Normal" } }, false, {})
+		end
+		-- Refresh log on success
+		if M_ref and M_ref.refresh_log then
+			M_ref.refresh_log()
+		end
+	else
+		-- Command failed, display captured output (stderr) as an error
+		local msg_chunks = {
+			{ "Error executing: ", "ErrorMsg" },
+			{ cmd_str .. "\n",     "Code" }
+		}
+		if #output_lines > 0 then
+			for _, line in ipairs(output_lines) do
+				table.insert(msg_chunks, { line .. "\n", "ErrorMsg" }) -- Add error lines
+			end
+			-- Remove trailing newline from the very last chunk
+			if msg_chunks[#msg_chunks][1]:sub(-1) == "\n" then
+				msg_chunks[#msg_chunks][1] = msg_chunks[#msg_chunks][1]:sub(1, -2)
+			end
+		else
+			table.insert(msg_chunks, { "(No error output captured, shell error: " .. shell_error_code .. ")", "ErrorMsg" })
+		end
+		vim.api.nvim_echo(msg_chunks, true, {}) -- Show error, force redraw
+	end
 end
 
 -- Existing command functions (create_bookmark, delete_bookmark, move_bookmark, etc.)
