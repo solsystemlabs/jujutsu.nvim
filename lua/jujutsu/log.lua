@@ -4,30 +4,29 @@
 local Log = {}
 
 local Utils = require("jujutsu.utils")
-
--- Reference to the main module's state (set via init)
 local M_ref = nil
-
--- ID for the help window, nil if closed
-Log.help_win_id = nil
+Log.help_win_id = nil -- For the help window
 
 -- Define the keymaps specific to the log window for the help display
--- Descriptions should match those used in setup_log_buffer_keymaps
 local log_keymaps_info = {
-	{ key = "?", desc = "Toggle keymap help" },
-	{ key = "q", desc = "Close log window" },
-	{ key = "j", desc = "Jump to next change" },
-	{ key = "k", desc = "Jump to previous change" },
-	{ key = "e", desc = "Edit current change (jj edit)" },
-	{ key = "d", desc = "Edit change description (jj describe)" },
-	{ key = "n", desc = "Create new change (jj new)" },
-	{ key = "a", desc = "Abandon change (jj abandon)" },
-	{ key = "c", desc = "Commit current change (jj commit)" },
-	{ key = "s", desc = "Show status window (jj st)" },
-	{ key = "l", desc = "Set log entry limit (-n)" },
-	{ key = "r", desc = "Set revset filter (-r)" },
-	{ key = "f", desc = "Search in log (diff_contains)" },
-	{ key = "T", desc = "Change log template (-T)" },
+	{ key = "?",  desc = "Toggle keymap help" },
+	{ key = "q",  desc = "Close log window" },
+	{ key = "j",  desc = "Jump to next change" },
+	{ key = "k",  desc = "Jump to previous change" },
+	{ key = "e",  desc = "Edit current change (jj edit)" },
+	{ key = "d",  desc = "Edit change description (jj describe)" },
+	{ key = "n",  desc = "Create new change (jj new)" },
+	{ key = "a",  desc = "Abandon change (jj abandon)" },
+	{ key = "c",  desc = "Commit current change (jj commit)" },
+	{ key = "s",  desc = "Show status window (jj st)" },
+	{ key = "l",  desc = "Set log entry limit (-n)" },
+	{ key = "r",  desc = "Set revset filter (-r)" },
+	{ key = "f",  desc = "Search in log (diff_contains)" },
+	{ key = "T",  desc = "Change log template (-T)" },
+	-- *** NEW: Bookmark Keymaps ***
+	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
+	{ key = "bd", desc = "[B]ookmark [D]elete..." },
+	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
 }
 
 
@@ -55,12 +54,10 @@ local template_options = {
 
 -- *** NEW: Function to close the help window (if open) ***
 function Log.close_help_window()
-	-- Check if the window ID exists and the window is still valid
 	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
 		vim.api.nvim_win_close(Log.help_win_id, true) -- Force close
 	end
-	-- Always reset the state variable
-	Log.help_win_id = nil
+	Log.help_win_id = nil                         -- Always reset state
 end
 
 -- *** NEW: Function to toggle the help window display ***
@@ -74,66 +71,52 @@ function Log.toggle_help_window()
 	-- --- Create Help Window Content ---
 	local help_content = { " Jujutsu Log Keymaps ", "-----------------------" }
 	local max_key_len = 0
-	-- Calculate padding needed for alignment
-	for _, map_info in ipairs(log_keymaps_info) do
-		max_key_len = math.max(max_key_len, #map_info.key)
-	end
-
-	-- Format each keymap entry
+	for _, map_info in ipairs(log_keymaps_info) do max_key_len = math.max(max_key_len, #map_info.key) end
 	for _, map_info in ipairs(log_keymaps_info) do
 		local key_padding = string.rep(" ", max_key_len - #map_info.key)
-		-- Use string.format for clean alignment
 		table.insert(help_content, string.format("  %s%s : %s", map_info.key, key_padding, map_info.desc))
 	end
 	table.insert(help_content, "-----------------------")
 	table.insert(help_content, " Press 'q' or '<Esc>' to close this help window.")
 
 	-- --- Create Help Buffer ---
-	local buf = vim.api.nvim_create_buf(false, true)           -- Create a new scratch buffer
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_content) -- Set buffer content
-	-- Set buffer options to make it read-only and temporary
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_content)
 	vim.api.nvim_buf_set_option(buf, 'readonly', true)
 	vim.api.nvim_buf_set_option(buf, 'modifiable', false)
 	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-	vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe') -- Delete buffer when window closes
+	vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
 	vim.api.nvim_buf_set_option(buf, 'swapfile', false)
 
 	-- --- Calculate Window Geometry ---
 	local content_width = 0
-	for _, line in ipairs(help_content) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line)) -- Use display width for accuracy
-	end
-	-- Calculate dimensions, ensuring it fits on screen
-	local width = math.max(40, math.min(content_width + 2, vim.o.columns - 4)) -- Add padding, min/max size
-	local height = math.min(#help_content, vim.o.lines - 4)                   -- Max height based on content lines
-	-- Center the window
+	for _, line in ipairs(help_content) do content_width = math.max(content_width, vim.fn.strdisplaywidth(line)) end
+	local width = math.max(40, math.min(content_width + 4, vim.o.columns - 4)) -- Increased padding slightly
+	local height = math.min(#help_content, vim.o.lines - 4)
 	local row = math.floor((vim.o.lines - height) / 2)
 	local col = math.floor((vim.o.columns - width) / 2)
 
 	-- --- Create Floating Window ---
 	local win_opts = {
-		relative = "editor", -- Relative to the editor grid
+		relative = "editor",
 		width = width,
 		height = height,
 		row = row,
 		col = col,
-		style = "minimal", -- No extra elements like line numbers
-		border = "rounded" -- Use a rounded border
+		style = "minimal",
+		border =
+		"rounded"
 	}
-	-- Open the window with the buffer and options
-	local win_id = vim.api.nvim_open_win(buf, true, win_opts) -- true = enter/focus window
+	local win_id = vim.api.nvim_open_win(buf, true, win_opts)
 
-	-- Check if window creation succeeded
 	if not win_id or not vim.api.nvim_win_is_valid(win_id) then
 		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {})
-		vim.api.nvim_buf_delete(buf, { force = true }) -- Clean up the buffer if window failed
+		vim.api.nvim_buf_delete(buf, { force = true })
 		return
 	end
 
 	-- --- Store Window ID and Set Keymaps for Help Window ---
-	Log.help_win_id = win_id -- Store the new window ID
-	-- Map 'q' and '<Esc>' in the new help buffer to close the help window
-	-- These keymaps are specific to the help buffer (`buffer = buf`)
+	Log.help_win_id = win_id
 	local keymap_opts = { noremap = true, silent = true, buffer = buf }
 	vim.keymap.set('n', 'q', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
 	vim.keymap.set('n', '<Esc>', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
@@ -141,40 +124,33 @@ end
 
 -- Helper function to set keymaps for log buffer
 local function setup_log_buffer_keymaps(buf)
-	-- Define common options for keymaps
 	local opts = { noremap = true, silent = true }
 
-	-- *** ADDED/MODIFIED: Add the new mapping for help toggle ***
-	vim.api.nvim_buf_set_keymap(buf, 'n', '?', ':lua require("jujutsu.log").toggle_help_window()<CR>',
-		vim.tbl_extend('keep', { desc = "Toggle keymap help" }, opts))
+	-- Helper to set keymaps easily
+	local function map(key, cmd, desc)
+		vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd, vim.tbl_extend('keep', { desc = desc }, opts))
+	end
 
-	-- Existing mappings... apply consistent options
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
-		vim.tbl_extend('keep', { desc = "Close log window" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Jump to next change" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Jump to previous change" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Edit current change" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Edit change description" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Create new change" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Abandon change" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
-		vim.tbl_extend('keep', { desc = "Show status" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'l', ':lua require("jujutsu").set_log_limit()<CR>',
-		vim.tbl_extend('keep', { desc = "Set log entry limit" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ':lua require("jujutsu").set_revset_filter()<CR>',
-		vim.tbl_extend('keep', { desc = "Set revset filter" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'f', ':lua require("jujutsu").search_in_log()<CR>',
-		vim.tbl_extend('keep', { desc = "Search in log" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'T', ':lua require("jujutsu").change_log_template()<CR>',
-		vim.tbl_extend('keep', { desc = "Change log template" }, opts))
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'c', ':lua require("jujutsu").commit_change()<CR>',
-		vim.tbl_extend('keep', { desc = "Commit current change" }, opts))
+	-- Apply mappings using the helper
+	map('?', ':lua require("jujutsu.log").toggle_help_window()<CR>', "Toggle keymap help")
+	map('q', ':lua require("jujutsu").toggle_log_window()<CR>', "Close log window")
+	map('j', ':lua require("jujutsu").jump_next_change()<CR>', "Jump to next change")
+	map('k', ':lua require("jujutsu").jump_prev_change()<CR>', "Jump to previous change")
+	map('e', ':lua require("jujutsu").edit_change()<CR>', "Edit current change")
+	map('d', ':lua require("jujutsu").describe_change()<CR>', "Edit change description")
+	map('n', ':lua require("jujutsu").new_change()<CR>', "Create new change")
+	map('a', ':lua require("jujutsu").abandon_change()<CR>', "Abandon change")
+	map('s', ':lua require("jujutsu").show_status()<CR>', "Show status")
+	map('l', ':lua require("jujutsu").set_log_limit()<CR>', "Set log entry limit")
+	map('r', ':lua require("jujutsu").set_revset_filter()<CR>', "Set revset filter")
+	map('f', ':lua require("jujutsu").search_in_log()<CR>', "Search in log")
+	map('T', ':lua require("jujutsu").change_log_template()<CR>', "Change log template")
+	map('c', ':lua require("jujutsu").commit_change()<CR>', "Commit current change")
+
+	-- *** NEW: Bookmark Mappings ***
+	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
+	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")
+	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
