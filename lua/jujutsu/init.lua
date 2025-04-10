@@ -49,6 +49,9 @@ local function setup_log_buffer_keymaps(buf)
 		{ noremap = true, silent = true, desc = "Search in log" })
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'T', ':lua require("jujutsu").change_log_template()<CR>',
 		{ noremap = true, silent = true, desc = "Change log template" })
+	-- Add commit command mapping
+	vim.api.nvim_buf_set_keymap(buf, 'n', 'c', ':lua require("jujutsu").commit_change()<CR>',
+		{ noremap = true, silent = true, desc = "Commit current change" })
 end
 
 -- Helper function to set keymaps for status buffer
@@ -438,6 +441,50 @@ local function new_change()
 	)
 end
 
+-- Function to handle jj commit command
+local function commit_change()
+	-- Get the current commit message (if any)
+	local current_description = vim.fn.system("jj log -r @ --no-graph -T 'description'")
+
+	-- Trim whitespace
+	current_description = current_description:gsub("^%s*(.-)%s*$", "%1")
+
+	-- Check if the change already has a description
+	if current_description ~= "" and current_description ~= "(no description set)" then
+		-- If it already has a description, just commit directly
+		execute_jj_command(
+			"jj commit",
+			nil,
+			"Committed change with existing message",
+			true
+		)
+	else
+		-- If it doesn't have a description, prompt for one
+		vim.ui.input(
+			{
+				prompt = "Commit message: ",
+				default = "",
+				completion = "file", -- This gives a decent sized input box
+			},
+			function(input)
+				if input and input ~= "" then -- If not cancelled and not empty message
+					-- Use jj commit with the provided message
+					local cmd = "jj commit -m " .. vim.fn.shellescape(input)
+					execute_jj_command(
+						cmd,
+						nil,
+						"Committed change with message: " .. input,
+						true
+					)
+				else
+					-- Show cancel message if the user pressed ESC or entered empty message
+					vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
+				end
+			end
+		)
+	end
+end
+
 -- *** New Functions for Enhanced Log Features ***
 
 -- Function to set the log limit
@@ -820,6 +867,11 @@ function M.setup()
 			end
 		)
 	end, { desc = "Jujutsu log options" })
+
+	-- Add mapping for commit command
+	vim.keymap.set('n', '<leader>jc', function()
+		M.commit_change()
+	end, { desc = "Commit Jujutsu change" })
 end
 
 M.edit_change = edit_change
@@ -829,4 +881,5 @@ M.abandon_change = abandon_change
 M.show_status = show_status
 M.close_status_window = close_status_window
 M.refresh_status = refresh_status
+M.commit_change = commit_change
 return M
