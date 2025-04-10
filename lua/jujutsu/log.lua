@@ -65,67 +65,78 @@ end
 -- Assumes M_ref.log_win is valid when called
 function Log.refresh_log_buffer()
 	local win_id = M_ref.log_win
-	-- Create a new buffer for log output
-	local new_buf = vim.api.nvim_create_buf(false, true)
+	-- Added validity check at the start for robustness
+	if not win_id or not vim.api.nvim_win_is_valid(win_id) then
+		vim.api.nvim_echo({ { "Error: Log.refresh_log_buffer called with invalid win_id", "ErrorMsg" } }, true, {})
+		-- Clear state if it matches the invalid window
+		if M_ref.log_win == win_id then
+			M_ref.log_win = nil; M_ref.log_buf = nil
+		end
+		return
+	end
 
-	-- Set the new buffer in the window
+	-- Create the buffer that will hold the log content
+	local new_buf = vim.api.nvim_create_buf(false, true) -- false=not listed, true=scratch
+
+	-- *** ADDED/MODIFIED LINES START ***
+	-- Set the name directly on the buffer object
+	vim.api.nvim_buf_set_name(new_buf, "JJ Log Viewer")
+
+	-- Set useful options for a log buffer
+	vim.bo[new_buf].buftype = "nofile" -- Not related to a file on disk
+	vim.bo[new_buf].bufhidden = "hide" -- Unload buffer when hidden (avoids multiple listed buffers)
+	vim.bo[new_buf].swapfile = false  -- No swap file needed
+	-- Set filetype for potential syntax highlighting if desired (optional)
+	-- vim.bo[new_buf].filetype = "git" -- or a custom 'jjlog' filetype
+	-- *** ADDED/MODIFIED LINES END ***
+
+	-- Set this newly named buffer into the target window
 	vim.api.nvim_win_set_buf(win_id, new_buf)
-
-	-- Update the global buffer reference
+	-- Update the state AFTER successfully setting the buffer
 	M_ref.log_buf = new_buf
 
-	-- Build the command with any specified options
+	-- Build the command parts...
 	local cmd_parts = { "jj", "log" }
 	local revset_parts = {}
-
-	-- Base revset
-	if M_ref.log_settings.revset ~= "" then
-		table.insert(revset_parts, "(" .. M_ref.log_settings.revset .. ")")
-	end
-
-	-- Search pattern (using diff_contains)
+	-- ... (rest of command building logic is unchanged) ...
+	if M_ref.log_settings.revset ~= "" then table.insert(revset_parts, "(" .. M_ref.log_settings.revset .. ")") end
 	if M_ref.log_settings.search_pattern ~= "" then
-		table.insert(revset_parts, "diff_contains(" .. vim.fn.shellescape(M_ref.log_settings.search_pattern) .. ")")
+		table.insert(revset_parts,
+			"diff_contains(" .. vim.fn.shellescape(M_ref.log_settings.search_pattern) .. ")")
 	end
-
-	-- Combine revset parts if any exist
 	if #revset_parts > 0 then
-		table.insert(cmd_parts, "-r")
-		table.insert(cmd_parts, vim.fn.shellescape(table.concat(revset_parts, " & ")))
+		table.insert(cmd_parts, "-r"); table.insert(cmd_parts, vim.fn.shellescape(table.concat(revset_parts, " & ")))
 	end
-
-	-- Add limit if specified
-	if M_ref.log_settings.limit ~= "" and tonumber(M_ref.log_settings.limit) then
-		table.insert(cmd_parts, "-n")
-		table.insert(cmd_parts, M_ref.log_settings.limit)
+	local limit_num = tonumber(M_ref.log_settings.limit)
+	if limit_num and limit_num > 0 then
+		table.insert(cmd_parts, "-n"); table.insert(cmd_parts, M_ref.log_settings.limit)
 	end
-
-	-- Add template if specified
 	if M_ref.log_settings.template ~= "" then
-		table.insert(cmd_parts, "-T")
-		table.insert(cmd_parts, vim.fn.shellescape(M_ref.log_settings.template))
+		table.insert(cmd_parts, "-T"); table.insert(cmd_parts, vim.fn.shellescape(M_ref.log_settings.template))
 	end
-
 	local final_cmd = table.concat(cmd_parts, " ")
 
-	-- Run the terminal in the new buffer
+
+	-- Run the terminal command in the buffer
 	vim.fn.termopen(final_cmd, {
 		on_exit = function()
-			-- Check if window still exists
+			-- Check if window (win_id) and buffer (new_buf) are still valid
 			if not vim.api.nvim_win_is_valid(win_id) then
-				M_ref.log_win = nil -- Clear potentially stale win ID
-				M_ref.log_buf = nil
+				if M_ref.log_win == win_id then
+					M_ref.log_win = nil; M_ref.log_buf = nil
+				end
+				return
+			end
+			if not vim.api.nvim_buf_is_valid(new_buf) then
+				if M_ref.log_buf == new_buf then M_ref.log_buf = nil end -- Clear state if buffer changed/deleted
 				return
 			end
 
-			-- Switch to normal mode
+			-- Terminal finished, set buffer to read-only etc.
 			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
-
-			-- Set buffer as read-only AFTER terminal exits
+			-- Options need to be set on the specific buffer 'new_buf'
 			vim.bo[new_buf].modifiable = false
 			vim.bo[new_buf].readonly = true
-
-			-- Set keymaps
 			setup_log_buffer_keymaps(new_buf)
 		end
 	})
@@ -491,27 +502,41 @@ function Log.jump_prev_change()
 end
 
 function Log.toggle_log_window()
-	-- Check if log window exists and is valid
+	-- Check if window is already open and valid
 	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 		-- Close the window
 		vim.api.nvim_win_close(M_ref.log_win, true)
+		-- Clear state
 		M_ref.log_win = nil
 		M_ref.log_buf = nil
+		-- Note: The buffer might still exist if bufhidden=hide, but won't cause E95
 		return
 	end
 
-	-- Create a split window
+	-- Create a new vertical split window
 	vim.cmd("botright vsplit")
-	-- Remember the window ID
-	M_ref.log_win = vim.api.nvim_get_current_win()
-	-- Create a new scratch buffer (refresh_log_buffer will handle setting it)
-	-- Set window title/header
-	vim.cmd("file JJ\\ Log\\ Viewer")
-	-- Set window width
+	M_ref.log_win = vim.api.nvim_get_current_win() -- Get the new window's ID
+
+	-- Check if window creation failed
+	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
+		vim.api.nvim_echo({ { "Failed to create split window.", "ErrorMsg" } }, true, {})
+		M_ref.log_win = nil -- Reset state
+		return
+	end
+
+	-- *** REMOVED THIS LINE ***
+	-- vim.cmd("file JJ\\ Log\\ Viewer") -- This caused the E95 error
+
+	-- Set window options if needed (like size)
 	vim.cmd("vertical resize 80")
 
-	-- Run jj log with current settings
-	Log.refresh_log_buffer() -- This now handles buffer creation/setting and state update
+	-- Call refresh_log_buffer, which will now:
+	-- 1. Create the actual content buffer
+	-- 2. Set its name to "JJ Log Viewer" using nvim_buf_set_name
+	-- 3. Set the buffer into the window M_ref.log_win
+	-- 4. Update M_ref.log_buf
+	-- 5. Run termopen
+	Log.refresh_log_buffer()
 end
 
 -- Initialize the module with a reference to the main state
