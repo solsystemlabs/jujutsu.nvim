@@ -10,35 +10,59 @@ local M_ref = nil
 
 -- Execute a jj command and refresh log if necessary
 -- Now calls M_ref.refresh_log which delegates to the Log module
-local function execute_jj_command(command_parts, change_id, success_message, refresh_log)
-	-- Ensure command_parts is a table
-	if type(command_parts) == "string" then
-		command_parts = vim.split(command_parts, " ", { plain = true }) -- Basic split, might need refinement for complex args
+local function execute_jj_command(command_parts, success_message, refresh_log)
+	if type(command_parts) ~= "table" then
+		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
+		return
 	end
 
-	-- Run the command using vim.fn.systemlist for better handling
-	-- local result = vim.fn.system(command) -- system() can be problematic
-	vim.fn.system(command_parts) -- Run silently in background
+	local command_str = table.concat(command_parts, " ")
+	-- Execute silently first
+	vim.fn.system(command_parts)
 
 	if vim.v.shell_error ~= 0 then
-		-- Attempt to get stderr or show generic error
-		local err_output = vim.fn.system(command_parts .. " 2>&1") -- Rerun capturing stderr
-		vim.api.nvim_echo(
-			{ { "Error executing: " .. table.concat(command_parts, " "), "ErrorMsg" }, { err_output, "ErrorMsg" } }, true, {})
-		return -- Stop further processing on error
+		-- Error occurred, try to capture stderr
+		local err_output = vim.fn.system(command_str .. " 2>&1")
+
+		-- Safely build the message chunks for nvim_echo
+		local msg_chunks = {
+			{ "Error executing: ",                          "ErrorMsg" },
+			{ (command_str or "<missing command>") .. "\n", "Code" } -- Add command safely
+		}
+
+		-- Determine the error text safely
+		local error_text
+		if err_output == nil then
+			error_text = "(No error output captured)"
+		elseif type(err_output) ~= "string" then
+			error_text = "(Non-string error output: " .. type(err_output) .. ")"
+		elseif err_output == "" then
+			error_text = "(Empty error output)"
+		else
+			-- It's a non-empty string, use it
+			error_text = err_output
+		end
+
+		-- Add the error text chunk
+		-- Ensure error_text is treated as a single block, remove potential trailing newline for cleaner echo
+		error_text = error_text:gsub("[\n\r]+$", "") -- Remove trailing newlines/CR
+		table.insert(msg_chunks, { error_text, "ErrorMsg" })
+
+		-- Call nvim_echo with the safely constructed chunks
+		vim.api.nvim_echo(msg_chunks, true, {}) -- `true` forces redraw
+
+		return                                -- Stop further processing on error
 	end
 
-	-- Show success message if provided
+	-- If no error:
 	if success_message then
 		vim.api.nvim_echo({ { success_message, "Normal" } }, false, {})
 	end
 
-	-- Refresh the log content if requested and log window is valid
 	if refresh_log then
 		M_ref.refresh_log() -- Delegate refresh call
 	end
 end
-
 -- Function to edit change with jj edit command
 function Commands.edit_change()
 	local line = vim.api.nvim_get_current_line()
@@ -60,27 +84,30 @@ end
 function Commands.abandon_change()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
-
-	if change_id then
-		-- Ask for confirmation before abandoning
-		vim.ui.confirm(
-			"Are you sure you want to abandon change " .. change_id .. "?",
-			function(confirmed)
-				if confirmed then
-					execute_jj_command(
-						{ "jj", "abandon", change_id },
-						change_id,
-						"Abandoned change " .. change_id,
-						true -- Refresh log
-					)
-				else
-					vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
-				end
-			end
-		)
-	else
+	if not change_id then
+		-- Use nvim_echo for consistency
 		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
+		return
 	end
+
+	-- Revert to using vim.ui.select for confirmation as in the original code
+	vim.ui.select(
+		{ "Yes", "No" }, -- Options
+		{
+			prompt = "Are you sure you want to abandon change " .. change_id .. "?",
+			-- You could add 'kind' or 'format' here if desired later
+		},
+		function(choice)
+			-- callback receives the selected string ("Yes" or "No") or nil if cancelled (e.g., Esc)
+			if choice == "Yes" then
+				-- Execute the command if "Yes" was explicitly chosen
+				execute_jj_command({ "jj", "abandon", change_id }, "Abandoned change " .. change_id, true)
+			else
+				-- Treat "No" or cancellation (choice is "No" or nil) as cancellation
+				vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
+			end
+		end
+	)
 end
 
 -- Function to add or edit change description
