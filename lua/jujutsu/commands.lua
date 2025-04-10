@@ -46,7 +46,12 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	end
 	-- Optional log refresh
 	if refresh_log then
-		M_ref.refresh_log()
+		-- Ensure M_ref is initialized before calling refresh_log
+		if M_ref and M_ref.refresh_log then
+			M_ref.refresh_log()
+		else
+			vim.api.nvim_echo({ { "Internal Error: M_ref not initialized for refresh.", "ErrorMsg" } }, true, {})
+		end
 	end
 	return true -- Indicate success
 end
@@ -67,18 +72,18 @@ local function get_bookmark_names()
 end
 
 
--- *** SIMPLIFIED: Function to run jj git push ***
+-- Function to run jj git push
 function Commands.git_push()
 	-- Call the helper function to execute the command
 	-- Provide a success message
-	-- Set refresh_log to false as push doesn't usually change the local log structure
-	execute_jj_command({ "jj", "git", "push" }, "jj git push command executed.", false)
+	-- *** MODIFIED: Set refresh_log to true ***
+	execute_jj_command({ "jj", "git", "push" }, "jj git push command executed.", true)
 	-- Note: Success message only indicates the command exited cleanly (exit code 0).
 	-- Detailed push status/errors would have been printed by execute_jj_command on failure.
 end
 
 -- Existing command functions (create_bookmark, delete_bookmark, move_bookmark, etc.)
--- ... (ensure they are present and correct, including the robust move_bookmark) ...
+-- ... (ensure they are present and correct) ...
 function Commands.create_bookmark()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)

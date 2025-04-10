@@ -23,14 +23,13 @@ local log_keymaps_info = {
 	{ key = "r",  desc = "Set revset filter (-r)" },
 	{ key = "f",  desc = "Search in log (diff_contains)" },
 	{ key = "T",  desc = "Change log template (-T)" },
-	-- *** NEW: Bookmark Keymaps ***
 	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
 	{ key = "bd", desc = "[B]ookmark [D]elete..." },
 	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
+	-- *** NEW: Push Keymap ***
+	{ key = "p",  desc = "Push changes (jj git push)" },
 }
 
-
--- Common revset templates to choose from
 local revset_templates = {
 	{ name = "Default",                    value = "" },
 	{ name = "All commits",                value = "::" },
@@ -51,24 +50,17 @@ local template_options = {
 	{ name = "Custom",   value = "CUSTOM" }
 }
 
-
--- *** NEW: Function to close the help window (if open) ***
+-- Function to close the help window (if open)
 function Log.close_help_window()
-	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
-		vim.api.nvim_win_close(Log.help_win_id, true) -- Force close
-	end
-	Log.help_win_id = nil                         -- Always reset state
+	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then vim.api.nvim_win_close(Log.help_win_id, true) end
+	Log.help_win_id = nil
 end
 
--- *** NEW: Function to toggle the help window display ***
+-- Function to toggle the help window display
 function Log.toggle_help_window()
-	-- If help window is already open and valid, close it
 	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
-		Log.close_help_window()
-		return
+		Log.close_help_window(); return
 	end
-
-	-- --- Create Help Window Content ---
 	local help_content = { " Jujutsu Log Keymaps ", "-----------------------" }
 	local max_key_len = 0
 	for _, map_info in ipairs(log_keymaps_info) do max_key_len = math.max(max_key_len, #map_info.key) end
@@ -76,27 +68,20 @@ function Log.toggle_help_window()
 		local key_padding = string.rep(" ", max_key_len - #map_info.key)
 		table.insert(help_content, string.format("  %s%s : %s", map_info.key, key_padding, map_info.desc))
 	end
-	table.insert(help_content, "-----------------------")
-	table.insert(help_content, " Press 'q' or '<Esc>' to close this help window.")
-
-	-- --- Create Help Buffer ---
+	table.insert(help_content, "-----------------------"); table.insert(help_content,
+		" Press 'q' or '<Esc>' to close this help window.")
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_content)
-	vim.api.nvim_buf_set_option(buf, 'readonly', true)
-	vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-	vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-	vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-
-	-- --- Calculate Window Geometry ---
-	local content_width = 0
-	for _, line in ipairs(help_content) do content_width = math.max(content_width, vim.fn.strdisplaywidth(line)) end
-	local width = math.max(40, math.min(content_width + 4, vim.o.columns - 4)) -- Increased padding slightly
-	local height = math.min(#help_content, vim.o.lines - 4)
-	local row = math.floor((vim.o.lines - height) / 2)
-	local col = math.floor((vim.o.columns - width) / 2)
-
-	-- --- Create Floating Window ---
+	vim.api.nvim_buf_set_option(buf, 'readonly', true); vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile'); vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe'); vim.api
+			.nvim_buf_set_option(buf, 'swapfile', false)
+	local content_width = 0; for _, line in ipairs(help_content) do
+		content_width = math.max(content_width,
+			vim.fn.strdisplaywidth(line))
+	end
+	local width = math.max(40, math.min(content_width + 4, vim.o.columns - 4)); local height = math.min(#help_content,
+		vim.o.lines - 4)
+	local row = math.floor((vim.o.lines - height) / 2); local col = math.floor((vim.o.columns - width) / 2)
 	local win_opts = {
 		relative = "editor",
 		width = width,
@@ -108,14 +93,10 @@ function Log.toggle_help_window()
 		"rounded"
 	}
 	local win_id = vim.api.nvim_open_win(buf, true, win_opts)
-
 	if not win_id or not vim.api.nvim_win_is_valid(win_id) then
-		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {})
-		vim.api.nvim_buf_delete(buf, { force = true })
-		return
+		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {}); vim.api.nvim_buf_delete(buf,
+			{ force = true }); return
 	end
-
-	-- --- Store Window ID and Set Keymaps for Help Window ---
 	Log.help_win_id = win_id
 	local keymap_opts = { noremap = true, silent = true, buffer = buf }
 	vim.keymap.set('n', 'q', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
@@ -125,13 +106,12 @@ end
 -- Helper function to set keymaps for log buffer
 local function setup_log_buffer_keymaps(buf)
 	local opts = { noremap = true, silent = true }
-
-	-- Helper to set keymaps easily
 	local function map(key, cmd, desc)
-		vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd, vim.tbl_extend('keep', { desc = desc }, opts))
+		vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd,
+			vim.tbl_extend('keep', { desc = desc }, opts))
 	end
 
-	-- Apply mappings using the helper
+	-- Apply mappings
 	map('?', ':lua require("jujutsu.log").toggle_help_window()<CR>', "Toggle keymap help")
 	map('q', ':lua require("jujutsu").toggle_log_window()<CR>', "Close log window")
 	map('j', ':lua require("jujutsu").jump_next_change()<CR>', "Jump to next change")
@@ -146,11 +126,11 @@ local function setup_log_buffer_keymaps(buf)
 	map('f', ':lua require("jujutsu").search_in_log()<CR>', "Search in log")
 	map('T', ':lua require("jujutsu").change_log_template()<CR>', "Change log template")
 	map('c', ':lua require("jujutsu").commit_change()<CR>', "Commit current change")
-
-	-- *** NEW: Bookmark Mappings ***
 	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
 	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
+	-- *** NEW: Push Mapping ***
+	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
