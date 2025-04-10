@@ -8,6 +8,29 @@ local Utils = require("jujutsu.utils")
 -- Reference to the main module's state (set via init)
 local M_ref = nil
 
+-- ID for the help window, nil if closed
+Log.help_win_id = nil
+
+-- Define the keymaps specific to the log window for the help display
+-- Descriptions should match those used in setup_log_buffer_keymaps
+local log_keymaps_info = {
+	{ key = "?", desc = "Toggle keymap help" },
+	{ key = "q", desc = "Close log window" },
+	{ key = "j", desc = "Jump to next change" },
+	{ key = "k", desc = "Jump to previous change" },
+	{ key = "e", desc = "Edit current change (jj edit)" },
+	{ key = "d", desc = "Edit change description (jj describe)" },
+	{ key = "n", desc = "Create new change (jj new)" },
+	{ key = "a", desc = "Abandon change (jj abandon)" },
+	{ key = "c", desc = "Commit current change (jj commit)" },
+	{ key = "s", desc = "Show status window (jj st)" },
+	{ key = "l", desc = "Set log entry limit (-n)" },
+	{ key = "r", desc = "Set revset filter (-r)" },
+	{ key = "f", desc = "Search in log (diff_contains)" },
+	{ key = "T", desc = "Change log template (-T)" },
+}
+
+
 -- Common revset templates to choose from
 local revset_templates = {
 	{ name = "Default",                    value = "" },
@@ -29,40 +52,132 @@ local template_options = {
 	{ name = "Custom",   value = "CUSTOM" }
 }
 
+
+-- *** NEW: Function to close the help window (if open) ***
+function Log.close_help_window()
+	-- Check if the window ID exists and the window is still valid
+	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
+		vim.api.nvim_win_close(Log.help_win_id, true) -- Force close
+	end
+	-- Always reset the state variable
+	Log.help_win_id = nil
+end
+
+-- *** NEW: Function to toggle the help window display ***
+function Log.toggle_help_window()
+	-- If help window is already open and valid, close it
+	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
+		Log.close_help_window()
+		return
+	end
+
+	-- --- Create Help Window Content ---
+	local help_content = { " Jujutsu Log Keymaps ", "-----------------------" }
+	local max_key_len = 0
+	-- Calculate padding needed for alignment
+	for _, map_info in ipairs(log_keymaps_info) do
+		max_key_len = math.max(max_key_len, #map_info.key)
+	end
+
+	-- Format each keymap entry
+	for _, map_info in ipairs(log_keymaps_info) do
+		local key_padding = string.rep(" ", max_key_len - #map_info.key)
+		-- Use string.format for clean alignment
+		table.insert(help_content, string.format("  %s%s : %s", map_info.key, key_padding, map_info.desc))
+	end
+	table.insert(help_content, "-----------------------")
+	table.insert(help_content, " Press 'q' or '<Esc>' to close this help window.")
+
+	-- --- Create Help Buffer ---
+	local buf = vim.api.nvim_create_buf(false, true)           -- Create a new scratch buffer
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_content) -- Set buffer content
+	-- Set buffer options to make it read-only and temporary
+	vim.api.nvim_buf_set_option(buf, 'readonly', true)
+	vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+	vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe') -- Delete buffer when window closes
+	vim.api.nvim_buf_set_option(buf, 'swapfile', false)
+
+	-- --- Calculate Window Geometry ---
+	local content_width = 0
+	for _, line in ipairs(help_content) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line)) -- Use display width for accuracy
+	end
+	-- Calculate dimensions, ensuring it fits on screen
+	local width = math.max(40, math.min(content_width + 2, vim.o.columns - 4)) -- Add padding, min/max size
+	local height = math.min(#help_content, vim.o.lines - 4)                   -- Max height based on content lines
+	-- Center the window
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+
+	-- --- Create Floating Window ---
+	local win_opts = {
+		relative = "editor", -- Relative to the editor grid
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal", -- No extra elements like line numbers
+		border = "rounded" -- Use a rounded border
+	}
+	-- Open the window with the buffer and options
+	local win_id = vim.api.nvim_open_win(buf, true, win_opts) -- true = enter/focus window
+
+	-- Check if window creation succeeded
+	if not win_id or not vim.api.nvim_win_is_valid(win_id) then
+		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {})
+		vim.api.nvim_buf_delete(buf, { force = true }) -- Clean up the buffer if window failed
+		return
+	end
+
+	-- --- Store Window ID and Set Keymaps for Help Window ---
+	Log.help_win_id = win_id -- Store the new window ID
+	-- Map 'q' and '<Esc>' in the new help buffer to close the help window
+	-- These keymaps are specific to the help buffer (`buffer = buf`)
+	local keymap_opts = { noremap = true, silent = true, buffer = buf }
+	vim.keymap.set('n', 'q', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
+	vim.keymap.set('n', '<Esc>', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
+end
+
 -- Helper function to set keymaps for log buffer
 local function setup_log_buffer_keymaps(buf)
-	vim.api.nvim_buf_set_keymap(buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
-		{ noremap = true, silent = true, desc = "Edit current change" })
+	-- Define common options for keymaps
+	local opts = { noremap = true, silent = true }
+
+	-- *** ADDED/MODIFIED: Add the new mapping for help toggle ***
+	vim.api.nvim_buf_set_keymap(buf, 'n', '?', ':lua require("jujutsu.log").toggle_help_window()<CR>',
+		vim.tbl_extend('keep', { desc = "Toggle keymap help" }, opts))
+
+	-- Existing mappings... apply consistent options
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").toggle_log_window()<CR>',
-		{ noremap = true, silent = true, desc = "Close log window" })
+		vim.tbl_extend('keep', { desc = "Close log window" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'j', ':lua require("jujutsu").jump_next_change()<CR>',
-		{ noremap = true, silent = true, desc = "Jump to next change" })
+		vim.tbl_extend('keep', { desc = "Jump to next change" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'k', ':lua require("jujutsu").jump_prev_change()<CR>',
-		{ noremap = true, silent = true, desc = "Jump to previous change" })
+		vim.tbl_extend('keep', { desc = "Jump to previous change" }, opts))
+	vim.api.nvim_buf_set_keymap(buf, 'n', 'e', ':lua require("jujutsu").edit_change()<CR>',
+		vim.tbl_extend('keep', { desc = "Edit current change" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'd', ':lua require("jujutsu").describe_change()<CR>',
-		{ noremap = true, silent = true, desc = "Edit change description" })
+		vim.tbl_extend('keep', { desc = "Edit change description" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'n', ':lua require("jujutsu").new_change()<CR>',
-		{ noremap = true, silent = true, desc = "Create new change" })
+		vim.tbl_extend('keep', { desc = "Create new change" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'a', ':lua require("jujutsu").abandon_change()<CR>',
-		{ noremap = true, silent = true, desc = "Abandon change" })
+		vim.tbl_extend('keep', { desc = "Abandon change" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 's', ':lua require("jujutsu").show_status()<CR>',
-		{ noremap = true, silent = true, desc = "Show status" })
-	-- Add new mappings for enhanced log features
+		vim.tbl_extend('keep', { desc = "Show status" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'l', ':lua require("jujutsu").set_log_limit()<CR>',
-		{ noremap = true, silent = true, desc = "Set log entry limit" })
+		vim.tbl_extend('keep', { desc = "Set log entry limit" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ':lua require("jujutsu").set_revset_filter()<CR>',
-		{ noremap = true, silent = true, desc = "Set revset filter" })
+		vim.tbl_extend('keep', { desc = "Set revset filter" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'f', ':lua require("jujutsu").search_in_log()<CR>',
-		{ noremap = true, silent = true, desc = "Search in log" })
+		vim.tbl_extend('keep', { desc = "Search in log" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'T', ':lua require("jujutsu").change_log_template()<CR>',
-		{ noremap = true, silent = true, desc = "Change log template" })
-	-- Add commit command mapping
+		vim.tbl_extend('keep', { desc = "Change log template" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'c', ':lua require("jujutsu").commit_change()<CR>',
-		{ noremap = true, silent = true, desc = "Commit current change" })
+		vim.tbl_extend('keep', { desc = "Commit current change" }, opts))
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
--- Assumes M_ref.log_win is valid when called
 function Log.refresh_log_buffer()
 	local win_id = M_ref.log_win
 	-- Added validity check at the start for robustness
@@ -78,7 +193,6 @@ function Log.refresh_log_buffer()
 	-- Create the buffer that will hold the log content
 	local new_buf = vim.api.nvim_create_buf(false, true) -- false=not listed, true=scratch
 
-	-- *** ADDED/MODIFIED LINES START ***
 	-- Set the name directly on the buffer object
 	vim.api.nvim_buf_set_name(new_buf, "JJ Log Viewer")
 
@@ -88,7 +202,6 @@ function Log.refresh_log_buffer()
 	vim.bo[new_buf].swapfile = false  -- No swap file needed
 	-- Set filetype for potential syntax highlighting if desired (optional)
 	-- vim.bo[new_buf].filetype = "git" -- or a custom 'jjlog' filetype
-	-- *** ADDED/MODIFIED LINES END ***
 
 	-- Set this newly named buffer into the target window
 	vim.api.nvim_win_set_buf(win_id, new_buf)
@@ -98,7 +211,6 @@ function Log.refresh_log_buffer()
 	-- Build the command parts...
 	local cmd_parts = { "jj", "log" }
 	local revset_parts = {}
-	-- ... (rest of command building logic is unchanged) ...
 	if M_ref.log_settings.revset ~= "" then table.insert(revset_parts, "(" .. M_ref.log_settings.revset .. ")") end
 	if M_ref.log_settings.search_pattern ~= "" then
 		table.insert(revset_parts,
@@ -127,62 +239,62 @@ function Log.refresh_log_buffer()
 				end
 				return
 			end
-			if not vim.api.nvim_buf_is_valid(new_buf) then
-				if M_ref.log_buf == new_buf then M_ref.log_buf = nil end -- Clear state if buffer changed/deleted
+			-- Use the buffer ID stored in M_ref, as it's the definitive one after setting
+			local current_log_buf = M_ref.log_buf
+			if not current_log_buf or not vim.api.nvim_buf_is_valid(current_log_buf) then
+				-- If the buffer we intended to use is gone, clear state
+				if M_ref.log_buf == current_log_buf then M_ref.log_buf = nil end
 				return
 			end
 
 			-- Terminal finished, set buffer to read-only etc.
 			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
-			-- Options need to be set on the specific buffer 'new_buf'
-			vim.bo[new_buf].modifiable = false
-			vim.bo[new_buf].readonly = true
-			setup_log_buffer_keymaps(new_buf)
+			-- Options need to be set on the specific buffer 'current_log_buf'
+			vim.bo[current_log_buf].modifiable = false
+			vim.bo[current_log_buf].readonly = true
+			setup_log_buffer_keymaps(current_log_buf)
 		end
 	})
 end
 
 -- Find the next line with a change ID
 local function find_next_change_line(direction)
-	local current_line = vim.api.nvim_win_get_cursor(0)[1]
+	local cursor_pos = vim.api.nvim_win_get_cursor(0) -- Returns {row, col} table
+	if not cursor_pos then return end                -- Should not happen in a valid window
+	local current_line = cursor_pos[1]
 	local line_count = vim.api.nvim_buf_line_count(0)
 	local found_line = nil
 
+	-- Loop logic...
 	if direction == "next" then
-		-- Search downward from current line
 		for i = current_line + 1, line_count do
-			local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-			if Utils.extract_change_id(line) then
+			local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false) -- Returns list
+			if lines and #lines > 0 and Utils.extract_change_id(lines[1]) then
 				found_line = i
 				break
 			end
 		end
-
-		-- Wrap around to the beginning if no match found
 		if not found_line then
 			for i = 1, current_line - 1 do
-				local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-				if Utils.extract_change_id(line) then
+				local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+				if lines and #lines > 0 and Utils.extract_change_id(lines[1]) then
 					found_line = i
 					break
 				end
 			end
 		end
 	else -- direction == "prev"
-		-- Search upward from current line
 		for i = current_line - 1, 1, -1 do
-			local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-			if Utils.extract_change_id(line) then
+			local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+			if lines and #lines > 0 and Utils.extract_change_id(lines[1]) then
 				found_line = i
 				break
 			end
 		end
-
-		-- Wrap around to the end if no match found
 		if not found_line then
 			for i = line_count, current_line + 1, -1 do
-				local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-				if Utils.extract_change_id(line) then
+				local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+				if lines and #lines > 0 and Utils.extract_change_id(lines[1]) then
 					found_line = i
 					break
 				end
@@ -203,26 +315,27 @@ function Log.set_log_limit()
 			default = M_ref.log_settings.limit,
 		},
 		function(input)
+			-- Check if user cancelled (input is nil)
 			if input == nil then
-				-- User cancelled
+				vim.api.nvim_echo({ { "Set limit cancelled.", "Normal" } }, false, {})
 				return
 			end
 
 			-- Validate input is empty or a number
-			if input ~= "" and not tonumber(input) then
+			local limit_num = tonumber(input)
+			if input ~= "" and not limit_num then
 				vim.api.nvim_echo({ { "Invalid limit: Must be a number or blank.", "ErrorMsg" } }, false, {})
 				return
 			end
+			-- Optional: Check if positive? The jj command might handle negatives.
+			-- if limit_num and limit_num <= 0 then ... end
 
-			-- Update the limit
-			M_ref.log_settings.limit = input
+			M_ref.log_settings.limit = input -- Store the original string input
 
-			-- Refresh the log if it's open
 			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 				Log.refresh_log_buffer()
 			end
 
-			-- Show feedback message
 			if input == "" then
 				vim.api.nvim_echo({ { "Log limit cleared", "Normal" } }, false, {})
 			else
@@ -246,8 +359,9 @@ function Log.set_revset_filter()
 			prompt = "Select a revset filter:",
 		},
 		function(choice)
+			-- Check if user cancelled (choice is nil)
 			if not choice then
-				-- User cancelled
+				vim.api.nvim_echo({ { "Set revset cancelled.", "Normal" } }, false, {})
 				return
 			end
 
@@ -260,7 +374,11 @@ function Log.set_revset_filter()
 				end
 			end
 
-			if not selected then return end -- Should not happen
+			-- Should always find a match if choice is not nil, but check defensively
+			if not selected then
+				vim.api.nvim_echo({ { "Internal error: Could not find selected revset.", "ErrorMsg" } }, true, {})
+				return
+			end
 
 			-- Handle custom revset
 			if selected.value == "CUSTOM" then
@@ -270,19 +388,20 @@ function Log.set_revset_filter()
 						default = M_ref.log_settings.revset,
 					},
 					function(input)
-						if input ~= nil then -- Allow empty string to clear custom
+						-- Check for cancellation
+						if input ~= nil then
 							M_ref.log_settings.revset = input
 							vim.api.nvim_echo({ { "Custom revset set to: " .. (input == "" and "<empty>" or input), "Normal" } }, false,
 								{})
 
 							-- Refresh the log if it's open
-							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-								Log.refresh_log_buffer()
-							end
+							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
+						else
+							vim.api.nvim_echo({ { "Custom revset cancelled.", "Normal" } }, false, {})
 						end
 					end
 				)
-				return
+				return -- Exit after starting input UI
 			end
 
 			-- Handle recent commits with a limit
@@ -293,21 +412,25 @@ function Log.set_revset_filter()
 						default = "10",
 					},
 					function(input)
-						if input and tonumber(input) and tonumber(input) > 0 then
-							local revset = selected.value:gsub("arg:1", tonumber(input))
+						-- Check for cancellation
+						if input == nil then
+							vim.api.nvim_echo({ { "Recent commits count cancelled.", "Normal" } }, false, {})
+							return
+						end
+						local num = tonumber(input)
+						if num and num > 0 then -- Ensure it's a positive number
+							local revset = selected.value:gsub("arg:1", num)
 							M_ref.log_settings.revset = revset
 							vim.api.nvim_echo({ { "Revset set to show " .. input .. " recent commits", "Normal" } }, false, {})
 
 							-- Refresh the log if it's open
-							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-								Log.refresh_log_buffer()
-							end
+							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 						else
 							vim.api.nvim_echo({ { "Invalid number, revset not changed", "WarningMsg" } }, false, {})
 						end
 					end
 				)
-				return
+				return -- Exit after starting input UI
 			end
 
 			-- Handle file: revset with a path
@@ -319,7 +442,11 @@ function Log.set_revset_filter()
 						completion = "file",
 					},
 					function(input)
-						if input == nil then return end -- Cancelled
+						-- Check for cancellation
+						if input == nil then
+							vim.api.nvim_echo({ { "File path input cancelled.", "Normal" } }, false, {})
+							return
+						end
 
 						local path
 						if input == "" then
@@ -330,17 +457,24 @@ function Log.set_revset_filter()
 								return
 							end
 
-							-- Get relative path to repo root
-							local repo_root_cmd = vim.fn.system({ "jj", "root" })
+							-- Get relative path to repo root safely
+							local repo_root_cmd_out = vim.fn.system({ "jj", "root" })
 							if vim.v.shell_error ~= 0 then
-								vim.api.nvim_echo({ { "Failed to get jj repo root", "ErrorMsg" } }, false, {})
+								vim.api.nvim_echo({ { "Failed to get jj repo root. Is jj installed and in a jj repo?", "ErrorMsg" } },
+									true, {})
 								return
 							end
-							local repo_root = repo_root_cmd:gsub("%s+$", "") -- Trim trailing newline
+							local repo_root = repo_root_cmd_out:gsub("%s+$", "") -- Trim trailing newline/space
+							if repo_root == "" then
+								vim.api.nvim_echo({ { "Failed to determine jj repo root.", "ErrorMsg" } }, true, {})
+								return
+							end
 							-- Make sure paths use forward slashes for consistency
 							path = path:gsub("\\", "/")
 							repo_root = repo_root:gsub("\\", "/")
-							path = path:gsub(repo_root .. "/", "")
+							-- Ensure trailing slash on repo_root for correct substitution
+							if not repo_root:find("/$") then repo_root = repo_root .. "/" end
+							path = path:gsub(repo_root, "", 1) -- Use gsub with count 1 for safety
 						else
 							path = input
 						end
@@ -350,12 +484,10 @@ function Log.set_revset_filter()
 						vim.api.nvim_echo({ { "Revset set to show commits affecting: " .. path, "Normal" } }, false, {})
 
 						-- Refresh the log if it's open
-						if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-							Log.refresh_log_buffer()
-						end
+						if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 					end
 				)
-				return
+				return -- Exit after starting input UI
 			end
 
 			-- Standard revset
@@ -369,9 +501,7 @@ function Log.set_revset_filter()
 			end
 
 			-- Refresh the log if it's open
-			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-				Log.refresh_log_buffer()
-			end
+			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 		end
 	)
 end
@@ -384,8 +514,9 @@ function Log.search_in_log()
 			default = M_ref.log_settings.search_pattern,
 		},
 		function(input)
+			-- Check for cancellation
 			if input == nil then
-				-- User cancelled
+				vim.api.nvim_echo({ { "Search cancelled.", "Normal" } }, false, {})
 				return
 			end
 
@@ -399,9 +530,7 @@ function Log.search_in_log()
 			end
 
 			-- Refresh the log if it's open
-			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-				Log.refresh_log_buffer()
-			end
+			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 		end
 	)
 end
@@ -420,8 +549,9 @@ function Log.change_log_template()
 			prompt = "Select a log template:",
 		},
 		function(choice)
+			-- Check for cancellation
 			if not choice then
-				-- User cancelled
+				vim.api.nvim_echo({ { "Change template cancelled.", "Normal" } }, false, {})
 				return
 			end
 
@@ -434,7 +564,7 @@ function Log.change_log_template()
 				end
 			end
 
-			if not selected then return end
+			if not selected then return end -- Should not happen
 
 			-- Handle custom template
 			if selected.value == "CUSTOM" then
@@ -444,14 +574,15 @@ function Log.change_log_template()
 						default = M_ref.log_settings.template,
 					},
 					function(input)
-						if input ~= nil then -- Allow empty to clear
+						-- Check for cancellation
+						if input ~= nil then
 							M_ref.log_settings.template = input
 							vim.api.nvim_echo({ { "Custom template set", "Normal" } }, false, {})
 
 							-- Refresh the log if it's open
-							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-								Log.refresh_log_buffer()
-							end
+							if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
+						else
+							vim.api.nvim_echo({ { "Custom template cancelled.", "Normal" } }, false, {})
 						end
 					end
 				)
@@ -469,9 +600,7 @@ function Log.change_log_template()
 			end
 
 			-- Refresh the log if it's open
-			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-				Log.refresh_log_buffer()
-			end
+			if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 		end
 	)
 end
@@ -488,18 +617,12 @@ function Log.reset_log_settings()
 	vim.api.nvim_echo({ { "Log settings reset to default", "Normal" } }, false, {})
 
 	-- Refresh the log if it's open
-	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-		Log.refresh_log_buffer()
-	end
+	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then Log.refresh_log_buffer() end
 end
 
-function Log.jump_next_change()
-	find_next_change_line("next")
-end
+function Log.jump_next_change() find_next_change_line("next") end
 
-function Log.jump_prev_change()
-	find_next_change_line("prev")
-end
+function Log.jump_prev_change() find_next_change_line("prev") end
 
 function Log.toggle_log_window()
 	-- Check if window is already open and valid
@@ -509,7 +632,8 @@ function Log.toggle_log_window()
 		-- Clear state
 		M_ref.log_win = nil
 		M_ref.log_buf = nil
-		-- Note: The buffer might still exist if bufhidden=hide, but won't cause E95
+		-- Also close the help window if it happens to be open
+		Log.close_help_window()
 		return
 	end
 
@@ -524,9 +648,6 @@ function Log.toggle_log_window()
 		return
 	end
 
-	-- *** REMOVED THIS LINE ***
-	-- vim.cmd("file JJ\\ Log\\ Viewer") -- This caused the E95 error
-
 	-- Set window options if needed (like size)
 	vim.cmd("vertical resize 80")
 
@@ -535,7 +656,7 @@ function Log.toggle_log_window()
 	-- 2. Set its name to "JJ Log Viewer" using nvim_buf_set_name
 	-- 3. Set the buffer into the window M_ref.log_win
 	-- 4. Update M_ref.log_buf
-	-- 5. Run termopen
+	-- 5. Run termopen and set keymaps upon exit
 	Log.refresh_log_buffer()
 end
 
@@ -543,5 +664,10 @@ end
 function Log.init(main_module_ref)
 	M_ref = main_module_ref
 end
+
+-- *** ADDED: Expose the new help functions ***
+Log.toggle_help_window = Log.toggle_help_window
+Log.close_help_window = Log.close_help_window
+
 
 return Log
