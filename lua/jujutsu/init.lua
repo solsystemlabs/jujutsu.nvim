@@ -55,6 +55,8 @@ function M.setup()
 	end, vim.tbl_extend('keep', { desc = "[J]ujutsu Log [O]ptions" }, opts))
 	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end,
 		vim.tbl_extend('keep', { desc = "[J]ujutsu [C]ommit Change" }, opts))
+	vim.keymap.set('n', '<leader>jn', function() Commands.new_change() end,
+		vim.tbl_extend('keep', { desc = "[J]ujutsu [N]ew Change" }, opts))
 
 	-- *** NEW: Git Push Mapping ***
 	vim.keymap.set('n', '<leader>jp', function() Commands.git_push() end,
