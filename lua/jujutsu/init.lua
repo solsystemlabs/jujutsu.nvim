@@ -30,11 +30,11 @@ function M.setup()
 
 	-- Existing mappings
 	vim.keymap.set('n', '<leader>jl', function() Log.toggle_log_window() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu [L]og Toggle" }, opts))
+		vim.tbl_extend('keep', { desc = "[L]og Toggle" }, opts))
 	vim.keymap.set('n', '<leader>js', function() Status.show_status() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu [S]tatus Show" }, opts))
+		vim.tbl_extend('keep', { desc = "[S]tatus Show" }, opts))
 	vim.keymap.set('n', '<leader>jr', function() Log.reset_log_settings() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu Log [R]eset Settings" }, opts))
+		vim.tbl_extend('keep', { desc = "Log [R]eset Settings" }, opts))
 	vim.keymap.set('n', '<leader>jo', function()
 		vim.ui.select({ "Set Limit", "Set Revset Filter", "Search in Log", "Change Template", "Reset Settings" },
 			{ prompt = "Select a Jujutsu log option:", },
@@ -52,15 +52,15 @@ function M.setup()
 					Log.reset_log_settings()
 				end
 			end)
-	end, vim.tbl_extend('keep', { desc = "[J]ujutsu Log [O]ptions" }, opts))
+	end, vim.tbl_extend('keep', { desc = "Log [O]ptions" }, opts))
 	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu [C]ommit Change" }, opts))
+		vim.tbl_extend('keep', { desc = "[C]ommit Change" }, opts))
 	vim.keymap.set('n', '<leader>jn', function() Commands.new_change() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu [N]ew Change" }, opts))
+		vim.tbl_extend('keep', { desc = "[N]ew Change" }, opts))
 
 	-- *** NEW: Git Push Mapping ***
 	vim.keymap.set('n', '<leader>jp', function() Commands.git_push() end,
-		vim.tbl_extend('keep', { desc = "[J]ujutsu Git [P]ush" }, opts))
+		vim.tbl_extend('keep', { desc = "Git [P]ush" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
