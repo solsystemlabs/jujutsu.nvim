@@ -173,10 +173,10 @@ function Commands.new_change()
 					-- Get a list of recent changes
 					local function display_change_list_for_selection(callback)
 						-- Run jj log to get a list of recent changes
-						local cmd = "jj log -n 15 --no-graph -T '{change_id} {description.first_line()}'"
+						local cmd = "jj log -n 15 --no-graph"
 						local changes = vim.fn.systemlist(cmd)
 						if vim.v.shell_error ~= 0 or #changes == 0 then
-							vim.api.nvim_echo({ { "Failed to get change list: " .. vim.inspect(changes), "ErrorMsg" } }, true, {})
+							vim.api.nvim_echo({ { "Failed to get change list", "ErrorMsg" } }, true, {})
 							return
 						end
 
@@ -184,8 +184,10 @@ function Commands.new_change()
 						local options = {}
 						local change_ids = {}
 						for _, change_line in ipairs(changes) do
-							local change_id, desc = change_line:match("([a-z0-9]+)%s+(.*)")
+							local change_id = Utils.extract_change_id(change_line)
 							if change_id then
+								-- Get description (the part after email)
+								local desc = change_line:match(".*@.-%.%w+%s+(.*)")
 								if not desc or desc == "" then
 									desc = "(no description)"
 								end
