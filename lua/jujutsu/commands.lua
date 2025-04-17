@@ -234,9 +234,156 @@ function Commands.new_change()
 
 	-- Create a function to show the advanced options dialog
 	local function show_advanced_options(description)
+		-- Create a temporary buffer for multi-select parent changes
+		local function create_multi_select_buffer(callback)
+			-- Get list of changes
+			local cmd = "jj log -n 20 --no-graph"
+			local changes = vim.fn.systemlist(cmd)
+			if vim.v.shell_error ~= 0 or #changes == 0 then
+				vim.api.nvim_echo({ { "Failed to get list of changes", "ErrorMsg" } }, true, {})
+				return
+			end
+
+			-- Format changes for selection
+			local options = {}
+			for _, change_line in ipairs(changes) do
+				local change_id = Utils.extract_change_id(change_line)
+				if change_id then
+					-- Get description (the part after email)
+					local desc = change_line:match(".*@.-%.%w+%s+(.*)")
+					if not desc or desc == "" then
+						desc = "(no description)"
+					end
+
+					local option_text = change_id .. " - " .. desc
+					table.insert(options, option_text)
+				end
+			end
+
+			-- Create a scratch buffer
+			local buf = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+			vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+			vim.api.nvim_buf_set_option(buf, 'swapfile', false)
+
+			-- Set buffer name
+			vim.api.nvim_buf_set_name(buf, "Select Multiple Parents")
+
+			-- Prepare the content with checkboxes
+			local content = {
+				"# Select parent changes for new merge commit",
+				"# Press Space to toggle selection, Enter to confirm",
+				"#",
+				"# Selected changes will be marked with [x]",
+				"",
+			}
+
+			-- Add each option with a checkbox
+			local selected = {}
+			for i = 1, #options do
+				selected[i] = false
+				table.insert(content, "[ ] " .. options[i])
+			end
+
+			-- Set the content
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+
+			-- Create window for the buffer
+			local width = math.floor(vim.o.columns * 0.8)
+			local height = math.min(#content + 2, math.floor(vim.o.lines * 0.8))
+			local col = math.floor((vim.o.columns - width) / 2)
+			local row = math.floor((vim.o.lines - height) / 2)
+
+			local opts = {
+				relative = 'editor',
+				width = width,
+				height = height,
+				col = col,
+				row = row,
+				style = 'minimal',
+				border = 'rounded'
+			}
+
+			local win = vim.api.nvim_open_win(buf, true, opts)
+
+			-- Save the current window to return to later
+			local current_win = vim.api.nvim_get_current_win()
+
+			-- Set mappings for the buffer
+			local function toggle_selection()
+				local line_nr = vim.api.nvim_win_get_cursor(win)[1]
+				-- Ignore header lines
+				if line_nr <= 5 then return end
+
+				local option_idx = line_nr - 5
+				if option_idx > #options then return end
+
+				-- Toggle selection
+				selected[option_idx] = not selected[option_idx]
+
+				-- Update the line
+				local marker = selected[option_idx] and "x" or " "
+				local new_line = "[" .. marker .. "] " .. options[option_idx]
+				vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
+			end
+
+			local function confirm_selection()
+				-- Collect the selected options
+				local result = {}
+				for i, is_selected in ipairs(selected) do
+					if is_selected then
+						-- Extract the change ID from the option text
+						local id = options[i]:match("^([a-z0-9]+)")
+						if id then
+							table.insert(result, id)
+						end
+					end
+				end
+
+				-- Close the window
+				vim.api.nvim_win_close(win, true)
+
+				-- Return to the original window
+				if vim.api.nvim_win_is_valid(current_win) then
+					vim.api.nvim_set_current_win(current_win)
+				end
+
+				-- Call the callback with the result
+				callback(result)
+			end
+
+			local function cancel_selection()
+				-- Close the window
+				vim.api.nvim_win_close(win, true)
+
+				-- Return to the original window
+				if vim.api.nvim_win_is_valid(current_win) then
+					vim.api.nvim_set_current_win(current_win)
+				end
+
+				-- Call the callback with an empty result
+				callback({})
+			end
+
+			-- Set keymaps
+			local opts = { noremap = true, silent = true, buffer = buf }
+			vim.keymap.set('n', '<Space>', toggle_selection, opts)
+			vim.keymap.set('n', '<CR>', confirm_selection, opts)
+			vim.keymap.set('n', 'q', cancel_selection, opts)
+			vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+
+			-- Set buffer local settings
+			vim.api.nvim_win_set_option(win, 'cursorline', true)
+			vim.api.nvim_set_current_buf(buf)
+			vim.cmd('syntax match Comment /^#.*/')
+			vim.cmd('syntax match Selected /\\[x\\]/')
+			vim.cmd('highlight link Selected String')
+		end
+
 		vim.ui.select(
 			{
 				"Create simple change",
+				"Create change with multiple parents",
 				"Insert before another change (select from list)",
 				"Insert after another change (select from list)",
 				"Insert before another change (select from log window)",
@@ -266,7 +413,171 @@ function Commands.new_change()
 					end
 
 					execute_jj_command(cmd_parts, success_msg, true)
-				elseif choice == "Insert before another change (select from list)" then
+				elseif choice == "Create change with multiple parents" then
+					-- Directly get list of changes without triggering another selection UI
+					local cmd = "jj log -n 20 --no-graph"
+					local changes = vim.fn.systemlist(cmd)
+					if vim.v.shell_error ~= 0 or #changes == 0 then
+						vim.api.nvim_echo({ { "Failed to get list of changes", "ErrorMsg" } }, true, {})
+						return
+					end
+
+					-- Format changes and create the multi-select buffer
+					-- Create a scratch buffer
+					local buf = vim.api.nvim_create_buf(false, true)
+					vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+					vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+					vim.api.nvim_buf_set_option(buf, 'swapfile', false)
+
+					-- Set buffer name
+					vim.api.nvim_buf_set_name(buf, "Select Multiple Parents")
+
+					-- Prepare the content with checkboxes
+					local content = {
+						"# Select parent changes for new merge commit",
+						"# Press Space to toggle selection, Enter to confirm",
+						"#",
+						"# Selected changes will be marked with [x]",
+						"",
+					}
+
+					-- Process the change list
+					local options = {}
+					local change_ids = {}
+					for _, change_line in ipairs(changes) do
+						local change_id = Utils.extract_change_id(change_line)
+						if change_id then
+							-- Get description (the part after email)
+							local desc = change_line:match(".*@.-%.%w+%s+(.*)")
+							if not desc or desc == "" then
+								desc = "(no description)"
+							end
+
+							-- Add to options list
+							table.insert(options, change_id .. " - " .. desc)
+							table.insert(change_ids, change_id)
+						end
+					end
+
+					-- Add each option with a checkbox
+					local selected = {}
+					for i = 1, #options do
+						selected[i] = false
+						table.insert(content, "[ ] " .. options[i])
+					end
+
+					-- Set the content
+					vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+
+					-- Create window for the buffer
+					local width = math.floor(vim.o.columns * 0.8)
+					local height = math.min(#content + 2, math.floor(vim.o.lines * 0.8))
+					local col = math.floor((vim.o.columns - width) / 2)
+					local row = math.floor((vim.o.lines - height) / 2)
+
+					local win_opts = {
+						relative = 'editor',
+						width = width,
+						height = height,
+						col = col,
+						row = row,
+						style = 'minimal',
+						border = 'rounded'
+					}
+
+					local win = vim.api.nvim_open_win(buf, true, win_opts)
+
+					-- Save the current window to return to later
+					local current_win = vim.api.nvim_get_current_win()
+
+					-- Set mappings for the buffer
+					local function toggle_selection()
+						local line_nr = vim.api.nvim_win_get_cursor(win)[1]
+						-- Ignore header lines
+						if line_nr <= 5 then return end
+
+						local option_idx = line_nr - 5
+						if option_idx > #options then return end
+
+						-- Toggle selection
+						selected[option_idx] = not selected[option_idx]
+
+						-- Update the line
+						local marker = selected[option_idx] and "x" or " "
+						local new_line = "[" .. marker .. "] " .. options[option_idx]
+						vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
+					end
+
+					local function confirm_selection()
+						-- Collect the selected options
+						local result = {}
+						for i, is_selected in ipairs(selected) do
+							if is_selected then
+								table.insert(result, change_ids[i])
+							end
+						end
+
+						-- Close the window
+						vim.api.nvim_win_close(win, true)
+
+						-- Return to the original window
+						if vim.api.nvim_win_is_valid(current_win) then
+							vim.api.nvim_set_current_win(current_win)
+						end
+
+						-- Process the result
+						if #result == 0 then
+							vim.api.nvim_echo({ { "No parent changes selected - operation cancelled", "WarningMsg" } }, false, {})
+							return
+						end
+
+						-- Construct the command
+						local cmd_parts = { "jj", "new" }
+
+						-- Add all selected parent IDs
+						for _, parent_id in ipairs(result) do
+							table.insert(cmd_parts, parent_id)
+						end
+
+						-- Add description if provided
+						if description ~= "" then
+							table.insert(cmd_parts, "-m")
+							table.insert(cmd_parts, description)
+						end
+
+						-- Execute the command
+						execute_jj_command(
+							cmd_parts,
+							"Created new change with " .. #result .. " parents",
+							true
+						)
+					end
+
+					local function cancel_selection()
+						-- Close the window
+						vim.api.nvim_win_close(win, true)
+
+						-- Return to the original window
+						if vim.api.nvim_win_is_valid(current_win) then
+							vim.api.nvim_set_current_win(current_win)
+						end
+
+						vim.api.nvim_echo({ { "Multi-parent change creation cancelled", "Normal" } }, false, {})
+					end
+
+					-- Set keymaps
+					local keymap_opts = { noremap = true, silent = true, buffer = buf }
+					vim.keymap.set('n', '<Space>', toggle_selection, keymap_opts)
+					vim.keymap.set('n', '<CR>', confirm_selection, keymap_opts)
+					vim.keymap.set('n', 'q', cancel_selection, keymap_opts)
+					vim.keymap.set('n', '<Esc>', cancel_selection, keymap_opts)
+
+					-- Set buffer local settings
+					vim.api.nvim_win_set_option(win, 'cursorline', true)
+					vim.api.nvim_set_current_buf(buf)
+					vim.cmd('syntax match Comment /^#.*/')
+					vim.cmd('syntax match Selected /\\[x\\]/')
+					vim.cmd('highlight link Selected String')
 					-- Show a list of changes to select from
 					display_change_list_for_selection(function(target_id)
 						if not target_id then
