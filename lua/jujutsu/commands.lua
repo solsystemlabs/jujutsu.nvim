@@ -64,9 +64,10 @@ local function get_bookmark_names()
 end
 
 -- Helper function to get a list of changes for selection
-local function display_change_list_for_selection(callback)
+local function display_change_list_for_selection(callback, limit)
+	limit = limit or 15
 	-- Run jj log to get a list of recent changes
-	local cmd = "jj log -n 15 --no-graph"
+	local cmd = "jj log -n " .. limit .. " --no-graph"
 	local changes = vim.fn.systemlist(cmd)
 	if vim.v.shell_error ~= 0 or #changes == 0 then
 		vim.api.nvim_echo({ { "Failed to get change list", "ErrorMsg" } }, true, {})
@@ -123,46 +124,7 @@ local function select_from_log_window(callback)
 		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 			local opts = { noremap = true, silent = true, buffer = buf }
-
-			-- Store the original mapping if it exists
-			local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
-
-			-- Set temporary mapping
-			vim.keymap.set("n", "<CR>", function()
-				-- Get the current line
-				local line = vim.api.nvim_get_current_line()
-				local selected_id = Utils.extract_change_id(line)
-
-				-- Reset the mapping
-				vim.keymap.del("n", "<CR>", { buffer = buf })
-
-				-- Restore original mapping if it existed
-				if original_cr_mapping and original_cr_mapping.buffer then
-					local restore_cmd = original_cr_mapping.mode .. "map"
-					if original_cr_mapping.noremap == 1 then
-						restore_cmd = original_cr_mapping.mode .. "noremap"
-					end
-					if original_cr_mapping.silent == 1 then
-						restore_cmd = restore_cmd .. " <silent>"
-					end
-					vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
-				end
-
-				-- Return to the original window
-				if vim.api.nvim_win_is_valid(current_win) then
-					vim.api.nvim_set_current_win(current_win)
-				end
-
-				-- Call the callback with the selected ID
-				if selected_id then
-					callback(selected_id)
-				else
-					vim.api.nvim_echo({
-						{ "No valid change ID found on that line", "WarningMsg" }
-					}, false, {})
-					callback(nil)
-				end
-			end, opts)
+			setup_log_selection_mapping(buf, current_win, callback)
 		end
 
 		return -- Exit here, the callback will continue the flow
@@ -177,50 +139,54 @@ local function select_from_log_window(callback)
 		-- Set up a temporary mapping for Enter key in log window
 		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 		local opts = { noremap = true, silent = true, buffer = buf }
-
-		-- Store the original mapping if it exists
-		local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
-
-		-- Original window where command was initiated
 		local current_win = vim.api.nvim_get_current_win()
-
-		-- Set temporary mapping
-		vim.keymap.set("n", "<CR>", function()
-			-- Get the current line
-			local line = vim.api.nvim_get_current_line()
-			local selected_id = Utils.extract_change_id(line)
-
-			-- Reset the mapping
-			vim.keymap.del("n", "<CR>", { buffer = buf })
-
-			-- Restore original mapping if it existed
-			if original_cr_mapping and original_cr_mapping.buffer then
-				local restore_cmd = original_cr_mapping.mode .. "map"
-				if original_cr_mapping.noremap == 1 then
-					restore_cmd = original_cr_mapping.mode .. "noremap"
-				end
-				if original_cr_mapping.silent == 1 then
-					restore_cmd = restore_cmd .. " <silent>"
-				end
-				vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
-			end
-
-			-- Return to the original window
-			if vim.api.nvim_win_is_valid(current_win) then
-				vim.api.nvim_set_current_win(current_win)
-			end
-
-			-- Call the callback with the selected ID
-			if selected_id then
-				callback(selected_id)
-			else
-				vim.api.nvim_echo({
-					{ "No valid change ID found on that line", "WarningMsg" }
-				}, false, {})
-				callback(nil)
-			end
-		end, opts)
+		setup_log_selection_mapping(buf, current_win, callback)
 	end
+end
+
+-- Helper function to setup log window selection mapping
+local function setup_log_selection_mapping(buf, current_win, callback)
+	local opts = { noremap = true, silent = true, buffer = buf }
+
+	-- Store the original mapping if it exists
+	local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
+
+	-- Set temporary mapping
+	vim.keymap.set("n", "<CR>", function()
+		-- Get the current line
+		local line = vim.api.nvim_get_current_line()
+		local selected_id = Utils.extract_change_id(line)
+
+		-- Reset the mapping
+		vim.keymap.del("n", "<CR>", { buffer = buf })
+
+		-- Restore original mapping if it existed
+		if original_cr_mapping and original_cr_mapping.buffer then
+			local restore_cmd = original_cr_mapping.mode .. "map"
+			if original_cr_mapping.noremap == 1 then
+				restore_cmd = original_cr_mapping.mode .. "noremap"
+			end
+			if original_cr_mapping.silent == 1 then
+				restore_cmd = restore_cmd .. " <silent>"
+			end
+			vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
+		end
+
+		-- Return to the original window
+		if vim.api.nvim_win_is_valid(current_win) then
+			vim.api.nvim_set_current_win(current_win)
+		end
+
+		-- Call the callback with the selected ID
+		if selected_id then
+			callback(selected_id)
+		else
+			vim.api.nvim_echo({
+				{ "No valid change ID found on that line", "WarningMsg" }
+			}, false, {})
+			callback(nil)
+		end
+	end, opts)
 end
 
 -- *** EXTENDED: Function to create a new change with additional options ***
@@ -246,6 +212,7 @@ function Commands.new_change()
 
 			-- Format changes for selection
 			local options = {}
+			local change_ids = {}
 			for _, change_line in ipairs(changes) do
 				local change_id = Utils.extract_change_id(change_line)
 				if change_id then
@@ -254,9 +221,8 @@ function Commands.new_change()
 					if not desc or desc == "" then
 						desc = "(no description)"
 					end
-
-					local option_text = change_id .. " - " .. desc
-					table.insert(options, option_text)
+					table.insert(options, change_id .. " - " .. desc)
+					table.insert(change_ids, change_id)
 				end
 			end
 
@@ -332,11 +298,7 @@ function Commands.new_change()
 				local result = {}
 				for i, is_selected in ipairs(selected) do
 					if is_selected then
-						-- Extract the change ID from the option text
-						local id = options[i]:match("^([a-z0-9]+)")
-						if id then
-							table.insert(result, id)
-						end
+						table.insert(result, change_ids[i])
 					end
 				end
 
@@ -414,118 +376,7 @@ function Commands.new_change()
 
 					execute_jj_command(cmd_parts, success_msg, true)
 				elseif choice == "Create change with multiple parents" then
-					-- Directly get list of changes without triggering another selection UI
-					local cmd = "jj log -n 20 --no-graph"
-					local changes = vim.fn.systemlist(cmd)
-					if vim.v.shell_error ~= 0 or #changes == 0 then
-						vim.api.nvim_echo({ { "Failed to get list of changes", "ErrorMsg" } }, true, {})
-						return
-					end
-
-					-- Format changes and create the multi-select buffer
-					-- Create a scratch buffer
-					local buf = vim.api.nvim_create_buf(false, true)
-					vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-					vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-					vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-
-					-- Set buffer name
-					vim.api.nvim_buf_set_name(buf, "Select Multiple Parents")
-
-					-- Prepare the content with checkboxes
-					local content = {
-						"# Select parent changes for new merge commit",
-						"# Press Space to toggle selection, Enter to confirm",
-						"#",
-						"# Selected changes will be marked with [x]",
-						"",
-					}
-
-					-- Process the change list
-					local options = {}
-					local change_ids = {}
-					for _, change_line in ipairs(changes) do
-						local change_id = Utils.extract_change_id(change_line)
-						if change_id then
-							-- Get description (the part after email)
-							local desc = change_line:match(".*@.-%.%w+%s+(.*)")
-							if not desc or desc == "" then
-								desc = "(no description)"
-							end
-
-							-- Add to options list
-							table.insert(options, change_id .. " - " .. desc)
-							table.insert(change_ids, change_id)
-						end
-					end
-
-					-- Add each option with a checkbox
-					local selected = {}
-					for i = 1, #options do
-						selected[i] = false
-						table.insert(content, "[ ] " .. options[i])
-					end
-
-					-- Set the content
-					vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-
-					-- Create window for the buffer
-					local width = math.floor(vim.o.columns * 0.8)
-					local height = math.min(#content + 2, math.floor(vim.o.lines * 0.8))
-					local col = math.floor((vim.o.columns - width) / 2)
-					local row = math.floor((vim.o.lines - height) / 2)
-
-					local win_opts = {
-						relative = 'editor',
-						width = width,
-						height = height,
-						col = col,
-						row = row,
-						style = 'minimal',
-						border = 'rounded'
-					}
-
-					local win = vim.api.nvim_open_win(buf, true, win_opts)
-
-					-- Save the current window to return to later
-					local current_win = vim.api.nvim_get_current_win()
-
-					-- Set mappings for the buffer
-					local function toggle_selection()
-						local line_nr = vim.api.nvim_win_get_cursor(win)[1]
-						-- Ignore header lines
-						if line_nr <= 5 then return end
-
-						local option_idx = line_nr - 5
-						if option_idx > #options then return end
-
-						-- Toggle selection
-						selected[option_idx] = not selected[option_idx]
-
-						-- Update the line
-						local marker = selected[option_idx] and "x" or " "
-						local new_line = "[" .. marker .. "] " .. options[option_idx]
-						vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
-					end
-
-					local function confirm_selection()
-						-- Collect the selected options
-						local result = {}
-						for i, is_selected in ipairs(selected) do
-							if is_selected then
-								table.insert(result, change_ids[i])
-							end
-						end
-
-						-- Close the window
-						vim.api.nvim_win_close(win, true)
-
-						-- Return to the original window
-						if vim.api.nvim_win_is_valid(current_win) then
-							vim.api.nvim_set_current_win(current_win)
-						end
-
-						-- Process the result
+					create_multi_select_buffer(function(result)
 						if #result == 0 then
 							vim.api.nvim_echo({ { "No parent changes selected - operation cancelled", "WarningMsg" } }, false, {})
 							return
@@ -551,57 +402,14 @@ function Commands.new_change()
 							"Created new change with " .. #result .. " parents",
 							true
 						)
-					end
-
-					local function cancel_selection()
-						-- Close the window
-						vim.api.nvim_win_close(win, true)
-
-						-- Return to the original window
-						if vim.api.nvim_win_is_valid(current_win) then
-							vim.api.nvim_set_current_win(current_win)
-						end
-
-						vim.api.nvim_echo({ { "Multi-parent change creation cancelled", "Normal" } }, false, {})
-					end
-
-					-- Set keymaps
-					local keymap_opts = { noremap = true, silent = true, buffer = buf }
-					vim.keymap.set('n', '<Space>', toggle_selection, keymap_opts)
-					vim.keymap.set('n', '<CR>', confirm_selection, keymap_opts)
-					vim.keymap.set('n', 'q', cancel_selection, keymap_opts)
-					vim.keymap.set('n', '<Esc>', cancel_selection, keymap_opts)
-
-					-- Set buffer local settings
-					vim.api.nvim_win_set_option(win, 'cursorline', true)
-					vim.api.nvim_set_current_buf(buf)
-					vim.cmd('syntax match Comment /^#.*/')
-					vim.cmd('syntax match Selected /\\[x\\]/')
-					vim.cmd('highlight link Selected String')
+					end)
+				elseif choice == "Insert before another change (select from list)" then
 					-- Show a list of changes to select from
 					display_change_list_for_selection(function(target_id)
 						if not target_id then
 							return -- Selection cancelled or failed
 						end
-
-						-- Command format: jj new [-m description] --insert-before target_id
-						local cmd_parts = { "jj", "new" }
-
-						-- Add description if provided
-						if description ~= "" then
-							table.insert(cmd_parts, "-m")
-							table.insert(cmd_parts, description)
-						end
-
-						-- Add the insert-before flag and target
-						table.insert(cmd_parts, "--insert-before")
-						table.insert(cmd_parts, target_id)
-
-						execute_jj_command(
-							cmd_parts,
-							"Created new change inserted before " .. target_id,
-							true
-						)
+						create_insert_change(description, target_id, "--insert-before", "before")
 					end)
 				elseif choice == "Insert after another change (select from list)" then
 					-- Show a list of changes to select from
@@ -609,25 +417,7 @@ function Commands.new_change()
 						if not target_id then
 							return -- Selection cancelled or failed
 						end
-
-						-- Command format: jj new [-m description] --insert-after target_id
-						local cmd_parts = { "jj", "new" }
-
-						-- Add description if provided
-						if description ~= "" then
-							table.insert(cmd_parts, "-m")
-							table.insert(cmd_parts, description)
-						end
-
-						-- Add the insert-after flag and target
-						table.insert(cmd_parts, "--insert-after")
-						table.insert(cmd_parts, target_id)
-
-						execute_jj_command(
-							cmd_parts,
-							"Created new change inserted after " .. target_id,
-							true
-						)
+						create_insert_change(description, target_id, "--insert-after", "after")
 					end)
 				elseif choice == "Insert before another change (select from log window)" then
 					-- Use log window to select a change
@@ -635,25 +425,7 @@ function Commands.new_change()
 						if not target_id then
 							return -- Selection cancelled or failed
 						end
-
-						-- Command format: jj new [-m description] --insert-before target_id
-						local cmd_parts = { "jj", "new" }
-
-						-- Add description if provided
-						if description ~= "" then
-							table.insert(cmd_parts, "-m")
-							table.insert(cmd_parts, description)
-						end
-
-						-- Add the insert-before flag and target
-						table.insert(cmd_parts, "--insert-before")
-						table.insert(cmd_parts, target_id)
-
-						execute_jj_command(
-							cmd_parts,
-							"Created new change inserted before " .. target_id,
-							true
-						)
+						create_insert_change(description, target_id, "--insert-before", "before")
 					end)
 				elseif choice == "Insert after another change (select from log window)" then
 					-- Use log window to select a change
@@ -661,29 +433,23 @@ function Commands.new_change()
 						if not target_id then
 							return -- Selection cancelled or failed
 						end
-
-						-- Command format: jj new [-m description] --insert-after target_id
-						local cmd_parts = { "jj", "new" }
-
-						-- Add description if provided
-						if description ~= "" then
-							table.insert(cmd_parts, "-m")
-							table.insert(cmd_parts, description)
-						end
-
-						-- Add the insert-after flag and target
-						table.insert(cmd_parts, "--insert-after")
-						table.insert(cmd_parts, target_id)
-
-						execute_jj_command(
-							cmd_parts,
-							"Created new change inserted after " .. target_id,
-							true
-						)
+						create_insert_change(description, target_id, "--insert-after", "after")
 					end)
 				end
 			end
 		)
+	end
+
+	-- Helper function to create an insert change command
+	local function create_insert_change(description, target_id, flag, position)
+		local cmd_parts = { "jj", "new" }
+		if description ~= "" then
+			table.insert(cmd_parts, "-m")
+			table.insert(cmd_parts, description)
+		end
+		table.insert(cmd_parts, flag)
+		table.insert(cmd_parts, target_id)
+		execute_jj_command(cmd_parts, "Created new change inserted " .. position .. " " .. target_id, true)
 	end
 
 	-- Start by asking for a description
