@@ -317,10 +317,8 @@ function Commands.new_change()
 			{
 				"Create simple change",
 				"Create change with multiple parents",
-				"Insert before another change (select from list)",
-				"Insert after another change (select from list)",
-				"Insert before another change (select from log window)",
-				"Insert after another change (select from log window)",
+				"Insert before another change",
+				"Insert after another change",
 				"Cancel"
 			},
 			{
@@ -374,23 +372,7 @@ function Commands.new_change()
 							true
 						)
 					end)
-				elseif choice == "Insert before another change (select from list)" then
-					-- Show a list of changes to select from
-					display_change_list_for_selection(function(target_id)
-						if not target_id then
-							return -- Selection cancelled or failed
-						end
-						create_insert_change(description, target_id, "--insert-before", "before")
-					end)
-				elseif choice == "Insert after another change (select from list)" then
-					-- Show a list of changes to select from
-					display_change_list_for_selection(function(target_id)
-						if not target_id then
-							return -- Selection cancelled or failed
-						end
-						create_insert_change(description, target_id, "--insert-after", "after")
-					end)
-				elseif choice == "Insert before another change (select from log window)" then
+				elseif choice == "Insert before another change" then
 					-- Use log window to select a change
 					select_from_log_window(function(target_id)
 						if not target_id then
@@ -398,7 +380,7 @@ function Commands.new_change()
 						end
 						create_insert_change(description, target_id, "--insert-before", "before")
 					end)
-				elseif choice == "Insert after another change (select from log window)" then
+				elseif choice == "Insert after another change" then
 					-- Use log window to select a change
 					select_from_log_window(function(target_id)
 						if not target_id then
