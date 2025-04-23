@@ -102,48 +102,6 @@ local function display_change_list_for_selection(callback, limit)
 	end)
 end
 
--- Helper function to select a change from log window
-local function select_from_log_window(callback)
-	-- If the log window isn't open, open it first
-	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
-		-- Save current window
-		local current_win = vim.api.nvim_get_current_win()
-
-		-- Open log window
-		local log_module = require("jujutsu.log")
-		log_module.toggle_log_window()
-
-		-- Provide instructions
-		vim.api.nvim_echo({
-			{ "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                        "Special" },
-			{ " to confirm",                                  "Normal" }
-		}, true, {})
-
-		-- Set up a temporary mapping for Enter key in log window
-		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-			local opts = { noremap = true, silent = true, buffer = buf }
-			setup_log_selection_mapping(buf, current_win, callback)
-		end
-
-		return -- Exit here, the callback will continue the flow
-	else
-		-- Log window is already open, just provide instructions
-		vim.api.nvim_echo({
-			{ "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                        "Special" },
-			{ " to confirm",                                  "Normal" }
-		}, true, {})
-
-		-- Set up a temporary mapping for Enter key in log window
-		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-		local opts = { noremap = true, silent = true, buffer = buf }
-		local current_win = vim.api.nvim_get_current_win()
-		setup_log_selection_mapping(buf, current_win, callback)
-	end
-end
-
 -- Helper function to setup log window selection mapping
 local function setup_log_selection_mapping(buf, current_win, callback)
 	local opts = { noremap = true, silent = true, buffer = buf }
@@ -189,6 +147,48 @@ local function setup_log_selection_mapping(buf, current_win, callback)
 	end, opts)
 end
 
+-- Helper function to select a change from log window
+local function select_from_log_window(callback)
+	-- If the log window isn't open, open it first
+	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
+		-- Save current window
+		local current_win = vim.api.nvim_get_current_win()
+
+		-- Open log window
+		local log_module = require("jujutsu.log")
+		log_module.toggle_log_window()
+
+		-- Provide instructions
+		vim.api.nvim_echo({
+			{ "Select a change from log window, then press ", "Normal" },
+			{ "Enter",                                        "Special" },
+			{ " to confirm",                                  "Normal" }
+		}, true, {})
+
+		-- Set up a temporary mapping for Enter key in log window
+		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
+			local opts = { noremap = true, silent = true, buffer = buf }
+			setup_log_selection_mapping(buf, current_win, callback)
+		end
+
+		return -- Exit here, the callback will continue the flow
+	else
+		-- Log window is already open, just provide instructions
+		vim.api.nvim_echo({
+			{ "Select a change from log window, then press ", "Normal" },
+			{ "Enter",                                        "Special" },
+			{ " to confirm",                                  "Normal" }
+		}, true, {})
+
+		-- Set up a temporary mapping for Enter key in log window
+		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
+		local opts = { noremap = true, silent = true, buffer = buf }
+		local current_win = vim.api.nvim_get_current_win()
+		setup_log_selection_mapping(buf, current_win, callback)
+	end
+end
+
 -- *** EXTENDED: Function to create a new change with additional options ***
 -- Based on documentation and error messages, the correct syntax appears to be:
 -- For simple creation: jj new [parent_change_id] [-m description]
@@ -197,6 +197,19 @@ end
 function Commands.new_change()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
+
+	-- Helper function to create an insert change command
+	local function create_insert_change(description, target_id, flag, position)
+		local cmd_parts = { "jj", "new" }
+		if description ~= "" then
+			table.insert(cmd_parts, "-m")
+			table.insert(cmd_parts, description)
+		end
+		table.insert(cmd_parts, flag)
+		table.insert(cmd_parts, target_id)
+		execute_jj_command(cmd_parts, "Created new change inserted " .. position .. " " .. target_id, true)
+	end
+
 
 	-- Create a function to show the advanced options dialog
 	local function show_advanced_options(description)
@@ -438,18 +451,6 @@ function Commands.new_change()
 				end
 			end
 		)
-	end
-
-	-- Helper function to create an insert change command
-	local function create_insert_change(description, target_id, flag, position)
-		local cmd_parts = { "jj", "new" }
-		if description ~= "" then
-			table.insert(cmd_parts, "-m")
-			table.insert(cmd_parts, description)
-		end
-		table.insert(cmd_parts, flag)
-		table.insert(cmd_parts, target_id)
-		execute_jj_command(cmd_parts, "Created new change inserted " .. position .. " " .. target_id, true)
 	end
 
 	-- Start by asking for a description
