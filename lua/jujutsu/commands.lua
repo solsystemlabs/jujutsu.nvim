@@ -560,6 +560,51 @@ function Commands.delete_bookmark()
 	end)
 end
 
+-- Helper function to move a bookmark to a specific change
+local function move_bookmark_to_change(name, change_id)
+	local cmd_parts_attempt1 = { "jj", "bookmark", "set", name, "-r", change_id }
+	local cmd_str_attempt1 = table.concat(cmd_parts_attempt1, " ")
+	local output = vim.fn.system(cmd_str_attempt1 .. " 2>&1")
+	local shell_error_code = vim.v.shell_error
+	local success = (shell_error_code == 0)
+	if success then
+		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {})
+		M_ref.refresh_log()
+	else
+		local backward_error_found = false
+		if output and type(output) == "string" then
+			if output:lower():find("refusing to move bookmark backwards", 1, true) then
+				backward_error_found = true
+			end
+		end
+		if backward_error_found then
+			vim.ui.select({ "Yes", "No" }, { prompt = "Allow moving bookmark '" .. name .. "' backward?" }, function(choice)
+				if choice == "Yes" then
+					local cmd_parts_attempt2 = { "jj", "bookmark", "set", "--allow-backwards", name, "-r", change_id }
+					execute_jj_command(cmd_parts_attempt2, "Bookmark '" .. name .. "' set backward to " .. change_id, true)
+				else
+					vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+				end
+			end)
+		else
+			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { cmd_str_attempt1 .. "\n", "Code" } }
+			local error_text
+			if output == nil then
+				error_text = "(No error output captured)"
+			elseif type(output) ~= "string" then
+				error_text = "(Non-string error output: " .. type(output) .. ")"
+			elseif output == "" then
+				error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
+			else
+				error_text = output
+			end
+			error_text = error_text:gsub("[\n\r]+$", "")
+			table.insert(msg_chunks, { error_text, "ErrorMsg" })
+			vim.api.nvim_echo(msg_chunks, true, {})
+		end
+	end
+end
+
 function Commands.move_bookmark()
 	local line = vim.api.nvim_get_current_line()
 	local change_id = Utils.extract_change_id(line)
@@ -567,54 +612,28 @@ function Commands.move_bookmark()
 		vim.api.nvim_echo({ { "No change ID found on this line to move bookmark to.", "WarningMsg" } }, false, {}); return
 	end
 	local existing_bookmarks = get_bookmark_names() or {}
-	vim.ui.input({
-		prompt = "Bookmark name to create/move: ",
-		completion = function(arg_lead)
-			local matches = {}; for _, name in ipairs(existing_bookmarks) do
-				if name:sub(1, #arg_lead) == arg_lead then
-					table
-							.insert(matches, name)
-				end
-			end; return matches
-		end
-	}, function(name)
-		if name == nil then
+	local options = {}
+	for _, name in ipairs(existing_bookmarks) do
+		table.insert(options, name)
+	end
+	table.insert(options, "Create new bookmark...")
+
+	vim.ui.select(options, { prompt = "Select bookmark to move or create new:" }, function(selected)
+		if not selected then
 			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {}); return
 		end
-		if name == "" then
-			vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {}); return
-		end
-		local cmd_parts_attempt1 = { "jj", "bookmark", "set", name, "-r", change_id }; local cmd_str_attempt1 = table.concat(
-			cmd_parts_attempt1, " ")
-		local output = vim.fn.system(cmd_str_attempt1 .. " 2>&1"); local shell_error_code = vim.v.shell_error; local success = (shell_error_code == 0)
-		if success then
-			vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {}); M_ref
-					.refresh_log()
+		if selected == "Create new bookmark..." then
+			vim.ui.input({ prompt = "New bookmark name: " }, function(name)
+				if name == nil then
+					vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {}); return
+				end
+				if name == "" then
+					vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {}); return
+				end
+				move_bookmark_to_change(name, change_id)
+			end)
 		else
-			local backward_error_found = false
-			if output and type(output) == "string" then if output:lower():find("refusing to move bookmark backwards", 1, true) then backward_error_found = true end end
-			if backward_error_found then
-				vim.ui.select({ "Yes", "No" }, { prompt = "Allow moving bookmark '" .. name .. "' backward?" }, function(choice)
-					if choice == "Yes" then
-						local cmd_parts_attempt2 = { "jj", "bookmark", "set", "--allow-backwards", name, "-r", change_id }; execute_jj_command(
-							cmd_parts_attempt2, "Bookmark '" .. name .. "' set backward to " .. change_id, true)
-					else
-						vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-					end
-				end)
-			else
-				local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { cmd_str_attempt1 .. "\n", "Code" } }; local error_text
-				if output == nil then
-					error_text = "(No error output captured)"
-				elseif type(output) ~= "string" then
-					error_text = "(Non-string error output: " .. type(output) .. ")"
-				elseif output == "" then
-					error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
-				else
-					error_text = output
-				end; error_text = error_text:gsub("[\n\r]+$", ""); table.insert(msg_chunks, { error_text, "ErrorMsg" }); vim.api
-						.nvim_echo(msg_chunks, true, {})
-			end
+			move_bookmark_to_change(selected, change_id)
 		end
 	end)
 end
