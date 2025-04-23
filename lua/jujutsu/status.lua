@@ -8,14 +8,15 @@ local M_ref = nil
 
 -- Helper function to set keymaps for status buffer
 local function setup_status_buffer_keymaps(buf)
+	local opts = { noremap = true, silent = true }
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'q', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true, desc = "Close status window" })
+		vim.tbl_extend('keep', { desc = "Close status window" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true, desc = "Close status window" })
+		vim.tbl_extend('keep', { desc = "Close status window" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', ':lua require("jujutsu").close_status_window()<CR>',
-		{ noremap = true, silent = true, desc = "Close status window" })
+		vim.tbl_extend('keep', { desc = "Close status window" }, opts))
 	vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ':lua require("jujutsu").refresh_status()<CR>',
-		{ noremap = true, silent = true, desc = "Refresh status" })
+		vim.tbl_extend('keep', { desc = "Refresh status" }, opts))
 end
 
 -- Function to show status in a floating window

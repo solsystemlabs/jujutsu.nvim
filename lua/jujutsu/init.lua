@@ -9,8 +9,15 @@ local Status = require("jujutsu.status")
 local Commands = require("jujutsu.commands")
 -- Utils is used internally by other modules
 
--- State variables... (unchanged)
-M.log_buf = nil; M.log_win = nil; M.status_buf = nil; M.status_win = nil
+-- State variables with type annotations
+---@type number|nil
+M.log_buf = nil
+---@type number|nil
+M.log_win = nil
+---@type number|nil
+M.status_buf = nil
+---@type number|nil
+M.status_win = nil
 M.log_settings = { limit = "", revset = "", template = "", search_pattern = "" }
 
 -- Initialize submodules... (unchanged)

@@ -4,6 +4,14 @@
 local Log = {}
 
 local Utils = require("jujutsu.utils")
+-- Reference to the main module's state (set via init)
+---@class JujutsuMainRef
+---@field log_win number|nil
+---@field log_buf number|nil
+---@field status_win number|nil
+---@field status_buf number|nil
+---@field refresh_log function|nil
+---@field log_settings table
 local M_ref = nil
 Log.help_win_id = nil -- For the help window
 
@@ -129,7 +137,6 @@ local function setup_log_buffer_keymaps(buf)
 	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
 	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
-	-- *** NEW: Push Mapping ***
 	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
 end
 

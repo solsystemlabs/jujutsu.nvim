@@ -6,11 +6,16 @@ local Commands = {}
 local Utils = require("jujutsu.utils")
 
 -- Reference to the main module (set via init) for state and calling refresh
+---@class JujutsuMainRef
+---@field log_win number|nil
+---@field log_buf number|nil
+---@field status_win number|nil
+---@field status_buf number|nil
+---@field refresh_log function|nil
 local M_ref = nil
 
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
--- (Unchanged)
 local function execute_jj_command(command_parts, success_message, refresh_log)
 	if type(command_parts) ~= "table" then
 		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
@@ -21,17 +26,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	if vim.v.shell_error ~= 0 then
 		local err_output = vim.fn.system(command_str .. " 2>&1")
 		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
-		local error_text
-		if err_output == nil then
-			error_text = "(No error output captured)"
-		elseif type(err_output) ~= "string" then
-			error_text = "(Non-string error output: " .. type(err_output) .. ")"
-		elseif err_output == "" then
-			error_text = "(Empty error output, shell error: " .. vim.v.shell_error .. ")"
-		else
-			error_text = err_output
-		end
-		error_text = error_text:gsub("[\n\r]+$", "")
+		local error_text = format_error_output(err_output, vim.v.shell_error)
 		table.insert(msg_chunks, { error_text, "ErrorMsg" })
 		vim.api.nvim_echo(msg_chunks, true, {})
 		return false -- Indicate failure
@@ -74,7 +69,21 @@ local function display_change_list_for_selection(callback, limit)
 		return
 	end
 
-	-- Format changes for selection
+	local options, change_ids = format_changes_for_selection(changes)
+	-- Let user select a change
+	vim.ui.select(options, {
+		prompt = "Select target change:",
+	}, function(choice, idx)
+		if choice and idx and change_ids[idx] then
+			callback(change_ids[idx])
+		else
+			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
+		end
+	end)
+end
+
+-- Helper function to format changes for selection UI
+local function format_changes_for_selection(changes)
 	local options = {}
 	local change_ids = {}
 	for _, change_line in ipairs(changes) do
@@ -89,17 +98,7 @@ local function display_change_list_for_selection(callback, limit)
 			table.insert(change_ids, change_id)
 		end
 	end
-
-	-- Let user select a change
-	vim.ui.select(options, {
-		prompt = "Select target change:",
-	}, function(choice, idx)
-		if choice and idx and change_ids[idx] then
-			callback(change_ids[idx])
-		else
-			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
-		end
-	end)
+	return options, change_ids
 end
 
 -- Helper function to setup log window selection mapping
@@ -168,7 +167,6 @@ local function select_from_log_window(callback)
 		-- Set up a temporary mapping for Enter key in log window
 		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-			local opts = { noremap = true, silent = true, buffer = buf }
 			setup_log_selection_mapping(buf, current_win, callback)
 		end
 
@@ -183,7 +181,6 @@ local function select_from_log_window(callback)
 
 		-- Set up a temporary mapping for Enter key in log window
 		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-		local opts = { noremap = true, silent = true, buffer = buf }
 		local current_win = vim.api.nvim_get_current_win()
 		setup_log_selection_mapping(buf, current_win, callback)
 	end
@@ -223,70 +220,15 @@ function Commands.new_change()
 				return
 			end
 
-			-- Format changes for selection
-			local options = {}
-			local change_ids = {}
-			for _, change_line in ipairs(changes) do
-				local change_id = Utils.extract_change_id(change_line)
-				if change_id then
-					-- Get description (the part after email)
-					local desc = change_line:match(".*@.-%.%w+%s+(.*)")
-					if not desc or desc == "" then
-						desc = "(no description)"
-					end
-					table.insert(options, change_id .. " - " .. desc)
-					table.insert(change_ids, change_id)
-				end
-			end
-
-			-- Create a scratch buffer
-			local buf = vim.api.nvim_create_buf(false, true)
-			vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-			vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-			vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-
-			-- Set buffer name
-			vim.api.nvim_buf_set_name(buf, "Select Multiple Parents")
-
-			-- Prepare the content with checkboxes
-			local content = {
-				"# Select parent changes for new merge commit",
-				"# Press Space to toggle selection, Enter to confirm",
-				"#",
-				"# Selected changes will be marked with [x]",
-				"",
-			}
-
-			-- Add each option with a checkbox
+			local options, change_ids = format_changes_for_selection(changes)
+			local buf = Utils.create_selection_buffer("Select Multiple Parents", options)
 			local selected = {}
 			for i = 1, #options do
 				selected[i] = false
-				table.insert(content, "[ ] " .. options[i])
 			end
 
-			-- Set the content
-			vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-
 			-- Create window for the buffer
-			local width = math.floor(vim.o.columns * 0.8)
-			local height = math.min(#content + 2, math.floor(vim.o.lines * 0.8))
-			local col = math.floor((vim.o.columns - width) / 2)
-			local row = math.floor((vim.o.lines - height) / 2)
-
-			local opts = {
-				relative = 'editor',
-				width = width,
-				height = height,
-				col = col,
-				row = row,
-				style = 'minimal',
-				border = 'rounded'
-			}
-
-			local win = vim.api.nvim_open_win(buf, true, opts)
-
-			-- Save the current window to return to later
-			local current_win = vim.api.nvim_get_current_win()
+			local win, current_win = Utils.open_selection_window(buf, options)
 
 			-- Set mappings for the buffer
 			local function toggle_selection()
@@ -473,12 +415,12 @@ function Commands.new_change()
 	)
 end
 
--- *** MODIFIED: Function to run jj git push and display output via vim.notify ***
+-- Function to run jj git push and display output via vim.notify
 function Commands.git_push()
 	local cmd_parts = { "jj", "git", "push" }
 	local cmd_str = table.concat(cmd_parts, " ")
 
-	-- Indicate start via notify (optional, can be removed)
+	-- Indicate start via notify
 	vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
 
 	-- Run the command and capture combined stdout/stderr using systemlist
@@ -491,29 +433,13 @@ function Commands.git_push()
 	output_string = output_string:gsub("[\n\r]+$", "") -- Trim trailing newline
 
 	if success then
-		-- Command succeeded
-		local message
-		if output_string ~= "" then
-			message = output_string
-		else
-			message = "jj git push completed successfully (no output)."
-		end
-		-- Display success output as INFO level notification
+		local message = output_string ~= "" and output_string or "jj git push completed successfully (no output)."
 		vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
-
-		-- Refresh log on success
 		if M_ref and M_ref.refresh_log then
 			M_ref.refresh_log()
 		end
 	else
-		-- Command failed
-		local error_message
-		if output_string ~= "" then
-			error_message = output_string
-		else
-			error_message = "(No error output captured, shell error: " .. shell_error_code .. ")"
-		end
-		-- Display failure output as ERROR level notification
+		local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
 		vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
 	end
 end
@@ -527,13 +453,13 @@ function Commands.create_bookmark()
 		vim.api.nvim_echo({ { "No change ID found on this line to bookmark.", "WarningMsg" } }, false, {}); return
 	end
 	vim.ui.input({ prompt = "Bookmark name to create: " }, function(name)
-		if name ~= nil and name ~= "" then
-			execute_jj_command({ "jj", "bookmark", "create", name, "-r", change_id },
-				"Bookmark '" .. name .. "' created at " .. change_id, true)
+		if name == nil then
+			vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
 		elseif name == "" then
 			vim.api.nvim_echo({ { "Bookmark creation cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
 		else
-			vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
+			execute_jj_command({ "jj", "bookmark", "create", name, "-r", change_id },
+				"Bookmark '" .. name .. "' created at " .. change_id, true)
 		end
 	end)
 end
@@ -545,18 +471,17 @@ function Commands.delete_bookmark()
 		vim.api.nvim_echo({ { "No bookmarks found to delete.", "Normal" } }, false, {}); return
 	end
 	vim.ui.select(bookmark_names, { prompt = "Select bookmark to delete:" }, function(selected_name)
-		if selected_name then
-			vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
-				if choice == "Yes" then
-					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
-						true)
-				else
-					vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
-				end
-			end)
-		else
+		if not selected_name then
 			vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+			return
 		end
+		vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
+			if choice == "Yes" then
+				execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.", true)
+			else
+				vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+			end
+		end)
 	end)
 end
 
@@ -588,21 +513,26 @@ local function move_bookmark_to_change(name, change_id)
 			end)
 		else
 			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { cmd_str_attempt1 .. "\n", "Code" } }
-			local error_text
-			if output == nil then
-				error_text = "(No error output captured)"
-			elseif type(output) ~= "string" then
-				error_text = "(Non-string error output: " .. type(output) .. ")"
-			elseif output == "" then
-				error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
-			else
-				error_text = output
-			end
-			error_text = error_text:gsub("[\n\r]+$", "")
+			local error_text = format_error_output(output, shell_error_code)
 			table.insert(msg_chunks, { error_text, "ErrorMsg" })
 			vim.api.nvim_echo(msg_chunks, true, {})
 		end
 	end
+end
+
+-- Helper function to format error output
+local function format_error_output(output, shell_error_code)
+	local error_text
+	if output == nil then
+		error_text = "(No error output captured)"
+	elseif type(output) ~= "string" then
+		error_text = "(Non-string error output: " .. type(output) .. ")"
+	elseif output == "" then
+		error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
+	else
+		error_text = output
+	end
+	return error_text:gsub("[\n\r]+$", "")
 end
 
 function Commands.move_bookmark()
@@ -678,8 +608,7 @@ function Commands.describe_change()
 	vim.ui.input({ prompt = "Description for " .. change_id .. ": ", default = description, completion = "file", },
 		function(input)
 			if input ~= nil then
-				execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id,
-					true)
+				execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id, true)
 			else
 				vim.api.nvim_echo({ { "Description edit cancelled", "Normal" } }, false, {})
 			end
@@ -698,14 +627,12 @@ function Commands.commit_change()
 	else
 		vim.ui.input({ prompt = "Commit message: ", default = "", completion = "file", },
 			function(input)
-				if input ~= nil and input ~= "" then
-					execute_jj_command({ "jj", "commit", "-m", input }, "Committed change with message: " .. input, true)
+				if input == nil then
+					vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
+				elseif input == "" then
+					vim.api.nvim_echo({ { "Commit cancelled: Empty message not allowed.", "WarningMsg" } }, false, {})
 				else
-					if input == "" then
-						vim.api.nvim_echo({ { "Commit cancelled: Empty message not allowed.", "WarningMsg" } }, false, {})
-					else
-						vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
-					end
+					execute_jj_command({ "jj", "commit", "-m", input }, "Committed change with message: " .. input, true)
 				end
 			end)
 	end
