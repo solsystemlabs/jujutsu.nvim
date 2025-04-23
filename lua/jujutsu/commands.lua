@@ -462,7 +462,6 @@ function Commands.rebase_change()
 			-- Step 2: Select the destination (change or bookmark)
 			vim.ui.select(
 				{
-					"Select change from list",
 					"Select change from log window",
 					"Select bookmark",
 					"Cancel"
@@ -476,15 +475,7 @@ function Commands.rebase_change()
 						return
 					end
 
-					if dest_choice == "Select change from list" then
-						display_change_list_for_selection(function(dest_id)
-							if not dest_id then
-								vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
-								return
-							end
-							execute_rebase_command(source_id, dest_id, flag)
-						end, 20)
-					elseif dest_choice == "Select change from log window" then
+					if dest_choice == "Select change from log window" then
 						select_from_log_window(function(dest_id)
 							if not dest_id then
 								vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
