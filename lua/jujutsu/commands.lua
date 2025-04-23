@@ -147,7 +147,7 @@ local function setup_log_selection_mapping(buf, current_win, callback)
 end
 
 -- Helper function to select a change from log window
-local function select_from_log_window(callback)
+local function select_from_log_window(callback, prompt)
 	-- If the log window isn't open, open it first
 	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
 		-- Save current window
@@ -159,9 +159,9 @@ local function select_from_log_window(callback)
 
 		-- Provide instructions
 		vim.api.nvim_echo({
-			{ "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                        "Special" },
-			{ " to confirm",                                  "Normal" }
+			{ prompt or "Select a change from log window, then press ", "Normal" },
+			{ "Enter",                                                  "Special" },
+			{ " to confirm",                                            "Normal" }
 		}, true, {})
 
 		-- Set up a temporary mapping for Enter key in log window
@@ -174,9 +174,9 @@ local function select_from_log_window(callback)
 	else
 		-- Log window is already open, just provide instructions
 		vim.api.nvim_echo({
-			{ "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                        "Special" },
-			{ " to confirm",                                  "Normal" }
+			{ prompt or "Select a change from log window, then press ", "Normal" },
+			{ "Enter",                                                  "Special" },
+			{ " to confirm",                                            "Normal" }
 		}, true, {})
 
 		-- Set up a temporary mapping for Enter key in log window
@@ -413,6 +413,105 @@ function Commands.new_change()
 			show_advanced_options(input)
 		end
 	)
+end
+
+-- *** NEW: Function to rebase changes with support for different flag variations ***
+-- Based on jj rebase command syntax:
+-- - Single change: jj rebase -r <revision> -d <destination>
+-- - Whole branch: jj rebase -b <branch> -d <destination>
+-- - Change and descendants: jj rebase -s <source> -d <destination>
+function Commands.rebase_change()
+	local line = vim.api.nvim_get_current_line()
+	local source_id = Utils.extract_change_id(line)
+	if not source_id then
+		vim.api.nvim_echo({ { "No change ID found on this line to rebase.", "WarningMsg" } }, false, {})
+		return
+	end
+
+	-- Step 1: Select the scope of the rebase
+	vim.ui.select(
+		{
+			"Rebase single change",
+			"Rebase whole branch",
+			"Rebase change and descendants",
+			"Cancel"
+		},
+		{
+			prompt = "Select rebase scope for " .. source_id .. ":",
+		},
+		function(scope_choice)
+			if scope_choice == "Cancel" or scope_choice == nil then
+				vim.api.nvim_echo({ { "Rebase cancelled", "Normal" } }, false, {})
+				return
+			end
+
+			local flag = ""
+			if scope_choice == "Rebase single change" then
+				flag = "-r"
+			elseif scope_choice == "Rebase whole branch" then
+				flag = "-b"
+			elseif scope_choice == "Rebase change and descendants" then
+				flag = "-s"
+			end
+
+			-- Step 2: Select the destination (change or bookmark)
+			vim.ui.select(
+				{
+					"Select change from list",
+					"Select change from log window",
+					"Select bookmark",
+					"Cancel"
+				},
+				{
+					prompt = "Select destination for rebase:",
+				},
+				function(dest_choice)
+					if dest_choice == "Cancel" or dest_choice == nil then
+						vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
+						return
+					end
+
+					if dest_choice == "Select change from list" then
+						display_change_list_for_selection(function(dest_id)
+							if not dest_id then
+								vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
+								return
+							end
+							execute_rebase_command(source_id, dest_id, flag)
+						end, 20)
+					elseif dest_choice == "Select change from log window" then
+						select_from_log_window(function(dest_id)
+							if not dest_id then
+								vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
+								return
+							end
+							execute_rebase_command(source_id, dest_id, flag)
+						end, "Select destination change for rebase, then press ")
+					elseif dest_choice == "Select bookmark" then
+						local bookmark_names = get_bookmark_names() or {}
+						if #bookmark_names == 0 then
+							vim.api.nvim_echo({ { "No bookmarks found to rebase onto.", "WarningMsg" } }, false, {})
+							return
+						end
+						vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark)
+							if not bookmark then
+								vim.api.nvim_echo({ { "Rebase destination selection cancelled", "Normal" } }, false, {})
+								return
+							end
+							execute_rebase_command(source_id, bookmark, flag)
+						end)
+					end
+				end
+			)
+		end
+	)
+end
+
+-- Helper function to execute the rebase command
+local function execute_rebase_command(source_id, dest_id, flag)
+	local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
+	local success_msg = "Rebased " .. source_id .. " onto " .. dest_id
+	execute_jj_command(cmd_parts, success_msg, true)
 end
 
 -- Function to run jj git push and display output via vim.notify

@@ -64,10 +64,10 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[C]ommit Change" }, opts))
 	vim.keymap.set('n', '<leader>jn', function() Commands.new_change() end,
 		vim.tbl_extend('keep', { desc = "[N]ew Change" }, opts))
-
-	-- *** NEW: Git Push Mapping ***
 	vim.keymap.set('n', '<leader>jp', function() Commands.git_push() end,
 		vim.tbl_extend('keep', { desc = "Git [P]ush" }, opts))
+	vim.keymap.set('n', '<leader>jrb', function() Commands.rebase_change() end,
+		vim.tbl_extend('keep', { desc = "[R]e[B]ase Change" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -93,9 +93,8 @@ M.close_log_help = Log.close_help_window
 M.create_bookmark = Commands.create_bookmark
 M.delete_bookmark = Commands.delete_bookmark
 M.move_bookmark = Commands.move_bookmark
-
--- *** NEW: Expose git_push function ***
 M.git_push = Commands.git_push
+M.rebase_change = Commands.rebase_change
 
 
 -- Return the main module table M
