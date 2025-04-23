@@ -14,6 +14,22 @@ local Utils = require("jujutsu.utils")
 ---@field refresh_log function|nil
 local M_ref = nil
 
+-- Helper function to format error output
+local function format_error_output(output, shell_error_code)
+	local error_text
+	if output == nil then
+		error_text = "(No error output captured)"
+	elseif type(output) ~= "string" then
+		error_text = "(Non-string error output: " .. type(output) .. ")"
+	elseif output == "" then
+		error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
+	else
+		error_text = output
+	end
+	return error_text:gsub("[\n\r]+$", "")
+end
+
+
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
 local function execute_jj_command(command_parts, success_message, refresh_log)
@@ -58,6 +74,25 @@ local function get_bookmark_names()
 	return names
 end
 
+-- Helper function to format changes for selection UI
+local function format_changes_for_selection(changes)
+	local options = {}
+	local change_ids = {}
+	for _, change_line in ipairs(changes) do
+		local change_id = Utils.extract_change_id(change_line)
+		if change_id then
+			-- Get description (the part after email)
+			local desc = change_line:match(".*@.-%.%w+%s+(.*)")
+			if not desc or desc == "" then
+				desc = "(no description)"
+			end
+			table.insert(options, change_id .. " - " .. desc)
+			table.insert(change_ids, change_id)
+		end
+	end
+	return options, change_ids
+end
+
 -- Helper function to get a list of changes for selection
 local function display_change_list_for_selection(callback, limit)
 	limit = limit or 15
@@ -80,25 +115,6 @@ local function display_change_list_for_selection(callback, limit)
 			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
 		end
 	end)
-end
-
--- Helper function to format changes for selection UI
-local function format_changes_for_selection(changes)
-	local options = {}
-	local change_ids = {}
-	for _, change_line in ipairs(changes) do
-		local change_id = Utils.extract_change_id(change_line)
-		if change_id then
-			-- Get description (the part after email)
-			local desc = change_line:match(".*@.-%.%w+%s+(.*)")
-			if not desc or desc == "" then
-				desc = "(no description)"
-			end
-			table.insert(options, change_id .. " - " .. desc)
-			table.insert(change_ids, change_id)
-		end
-	end
-	return options, change_ids
 end
 
 -- Helper function to setup log window selection mapping
@@ -454,6 +470,13 @@ function Commands.rebase_change()
 				flag = "-s"
 			end
 
+			-- Helper function to execute the rebase command
+			local function execute_rebase_command(source_id, dest_id, flag)
+				local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
+				local success_msg = "Rebased " .. source_id .. " onto " .. dest_id
+				execute_jj_command(cmd_parts, success_msg, true)
+			end
+
 			-- Step 2: Select the destination (change or bookmark)
 			vim.ui.select(
 				{
@@ -507,13 +530,6 @@ function Commands.rebase_change()
 	)
 end
 
--- Helper function to execute the rebase command
-local function execute_rebase_command(source_id, dest_id, flag)
-	local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
-	local success_msg = "Rebased " .. source_id .. " onto " .. dest_id
-	execute_jj_command(cmd_parts, success_msg, true)
-end
-
 -- Function to run jj git push and display output via vim.notify
 function Commands.git_push()
 	local cmd_parts = { "jj", "git", "push" }
@@ -538,7 +554,8 @@ function Commands.git_push()
 			M_ref.refresh_log()
 		end
 	else
-		local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
+		local error_message = output_string ~= "" and output_string or
+				"(No error output captured, shell error: " .. shell_error_code .. ")"
 		vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
 	end
 end
@@ -576,7 +593,8 @@ function Commands.delete_bookmark()
 		end
 		vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
 			if choice == "Yes" then
-				execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.", true)
+				execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
+					true)
 			else
 				vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
 			end
@@ -617,21 +635,6 @@ local function move_bookmark_to_change(name, change_id)
 			vim.api.nvim_echo(msg_chunks, true, {})
 		end
 	end
-end
-
--- Helper function to format error output
-local function format_error_output(output, shell_error_code)
-	local error_text
-	if output == nil then
-		error_text = "(No error output captured)"
-	elseif type(output) ~= "string" then
-		error_text = "(Non-string error output: " .. type(output) .. ")"
-	elseif output == "" then
-		error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
-	else
-		error_text = output
-	end
-	return error_text:gsub("[\n\r]+$", "")
 end
 
 function Commands.move_bookmark()
@@ -707,7 +710,8 @@ function Commands.describe_change()
 	vim.ui.input({ prompt = "Description for " .. change_id .. ": ", default = description, completion = "file", },
 		function(input)
 			if input ~= nil then
-				execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id, true)
+				execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id,
+					true)
 			else
 				vim.api.nvim_echo({ { "Description edit cancelled", "Normal" } }, false, {})
 			end
