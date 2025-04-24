@@ -701,13 +701,19 @@ function Commands.split_change()
 		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
 	end
 
+	-- Verify if the change has diffs to split
+	local diff_check = vim.fn.system("jj show " .. change_id)
+	if vim.v.shell_error ~= 0 or not diff_check:match("diff") then
+		vim.api.nvim_echo({ { "No changes to split in " .. change_id .. ".", "WarningMsg" } }, false, {}); return
+	end
+
 	-- Create a new buffer for the floating window
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, "JJ Split TUI")
 
 	-- Calculate dimensions for the floating window
-	local width = math.floor(vim.o.columns * 0.8)
-	local height = math.floor(vim.o.lines * 0.8)
+	local width = math.floor(vim.o.columns * 0.9)
+	local height = math.floor(vim.o.lines * 0.9)
 	local row = math.floor((vim.o.lines - height) / 2)
 	local col = math.floor((vim.o.columns - width) / 2)
 
@@ -719,21 +725,27 @@ function Commands.split_change()
 		row = row,
 		col = col,
 		style = "minimal",
-		border = "rounded"
+		border = "rounded",
 	})
 
-	-- Set buffer options
-	vim.bo[buf].buftype = "nofile"
+	-- Set buffer options for terminal
+	vim.bo[buf].buftype = "terminal"
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].buflisted = false
 
-	-- Open terminal in the floating window for the split TUI
-	vim.fn.termopen("jj split -i " .. change_id, {
-		-- Ensure interactive mode works by setting up the environment
+	-- Set up terminal with explicit interactive shell to ensure UI works
+	local shell = vim.env.SHELL or "/bin/sh"
+	vim.fn.termopen(shell, {
+		on_input = function(_, _, _, data)
+			-- Ensure input is sent to the terminal for interactive mode
+			vim.fn.chansend(vim.b[buf].terminal_job_id, data)
+		end,
 		env = {
 			EDITOR = vim.env.EDITOR or "vim",
-			TERM = vim.env.TERM or "xterm-256color"
+			TERM = vim.env.TERM or "xterm-256color",
+			COLUMNS = tostring(width),
+			LINES = tostring(height),
 		},
 		on_exit = function(_, code, _)
 			-- Check if window is still valid before closing
@@ -757,7 +769,14 @@ function Commands.split_change()
 		end
 	})
 
-	-- Start insert mode in the terminal
+	-- Wait briefly for terminal to initialize, then send the command
+	vim.defer_fn(function()
+		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id then
+			vim.fn.chansend(vim.b[buf].terminal_job_id, "jj split -i " .. change_id .. "\n")
+		end
+	}, 100)
+
+	-- Start in terminal mode
 	vim.cmd("startinsert")
 end
 
