@@ -729,7 +729,7 @@ function Commands.split_change()
 	})
 
 	-- Set buffer options for terminal
-	vim.bo[buf].buftype = "terminal"
+	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].buflisted = false
@@ -737,10 +737,6 @@ function Commands.split_change()
 	-- Set up terminal with explicit interactive shell to ensure UI works
 	local shell = vim.env.SHELL or "/bin/sh"
 	vim.fn.termopen(shell, {
-		on_input = function(_, _, _, data)
-			-- Ensure input is sent to the terminal for interactive mode
-			vim.fn.chansend(vim.b[buf].terminal_job_id, data)
-		end,
 		env = {
 			EDITOR = vim.env.EDITOR or "vim",
 			TERM = vim.env.TERM or "xterm-256color",
