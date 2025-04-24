@@ -68,6 +68,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "Git [P]ush" }, opts))
 	vim.keymap.set('n', '<leader>jrb', function() Commands.rebase_change() end,
 		vim.tbl_extend('keep', { desc = "[R]e[B]ase Change" }, opts))
+	vim.keymap.set('n', '<leader>jS', function() Commands.split_change() end,
+		vim.tbl_extend('keep', { desc = "[S]plit Change" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -95,6 +97,7 @@ M.delete_bookmark = Commands.delete_bookmark
 M.move_bookmark = Commands.move_bookmark
 M.git_push = Commands.git_push
 M.rebase_change = Commands.rebase_change
+M.split_change = Commands.split_change
 
 
 -- Return the main module table M
