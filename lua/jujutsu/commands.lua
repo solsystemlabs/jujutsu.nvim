@@ -701,12 +701,39 @@ function Commands.split_change()
 		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
 	end
 
-	-- Open a terminal buffer for the split TUI
-	vim.cmd("belowright new")
-	local buf = vim.api.nvim_get_current_buf()
+	-- Create a new buffer for the floating window
+	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, "JJ Split TUI")
+
+	-- Calculate dimensions for the floating window
+	local width = math.floor(vim.o.columns * 0.8)
+	local height = math.floor(vim.o.lines * 0.8)
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+
+	-- Open a floating window
+	local win = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded"
+	})
+
+	-- Set buffer options
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].buflisted = false
+
+	-- Open terminal in the floating window for the split TUI
 	vim.fn.termopen("jj split " .. change_id, {
 		on_exit = function(_, code)
+			if vim.api.nvim_win_is_valid(win) then
+				vim.api.nvim_win_close(win, true)
+			end
 			if code == 0 then
 				vim.api.nvim_echo({ { "Change " .. change_id .. " split successfully", "Normal" } }, false, {})
 				if M_ref and M_ref.refresh_log then
@@ -717,6 +744,7 @@ function Commands.split_change()
 			end
 		end
 	})
+
 	-- Start insert mode in the terminal
 	vim.cmd("startinsert")
 end
