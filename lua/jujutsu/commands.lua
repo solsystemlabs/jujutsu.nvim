@@ -774,7 +774,7 @@ function Commands.split_change()
 		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id then
 			vim.fn.chansend(vim.b[buf].terminal_job_id, "jj split -i " .. change_id .. "\n")
 		end
-	}, 100)
+	end, 100)
 
 	-- Start in terminal mode
 	vim.cmd("startinsert")
@@ -827,6 +827,5 @@ Commands.new_change = Commands.new_change
 Commands.commit_change = Commands.commit_change
 Commands.split_change = Commands.split_change
 Commands.rebase_onto_master = Commands.rebase_onto_master
-
 
 return Commands
