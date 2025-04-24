@@ -729,8 +729,8 @@ function Commands.split_change()
 	vim.bo[buf].buflisted = false
 
 	-- Open terminal in the floating window for the split TUI
-	vim.fn.termopen("jj split " .. change_id, {
-		on_exit = function(_, code)
+	vim.fn.termopen("jj split " .. change_id .. "-i", {
+		on_exit = function(_, code, _)
 			if vim.api.nvim_win_is_valid(win) then
 				vim.api.nvim_win_close(win, true)
 			end
@@ -740,7 +740,10 @@ function Commands.split_change()
 					M_ref.refresh_log()
 				end
 			else
-				vim.api.nvim_echo({ { "Error splitting change " .. change_id, "ErrorMsg" } }, true, {})
+				-- Capture error output from the terminal buffer before closing
+				local error_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+				local error_msg = table.concat(error_lines, "\n")
+				vim.api.nvim_echo({ { "Error splitting change " .. change_id .. ": " .. error_msg, "ErrorMsg" } }, true, {})
 			end
 		end
 	})
