@@ -691,6 +691,39 @@ function Commands.describe_change()
 		end)
 end
 
+function Commands.split_change()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = Utils.extract_change_id(line)
+	if not change_id then
+		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
+	end
+	
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to split change " .. change_id .. "?" }, function(choice)
+		if choice == "Yes" then
+			-- Open a terminal buffer for the split TUI
+			vim.cmd("belowright new")
+			local buf = vim.api.nvim_get_current_buf()
+			vim.api.nvim_buf_set_name(buf, "JJ Split TUI")
+			vim.fn.termopen("jj split " .. change_id, {
+				on_exit = function(_, code)
+					if code == 0 then
+						vim.api.nvim_echo({ { "Change " .. change_id .. " split successfully", "Normal" } }, false, {})
+						if M_ref and M_ref.refresh_log then
+							M_ref.refresh_log()
+						end
+					else
+						vim.api.nvim_echo({ { "Error splitting change " .. change_id, "ErrorMsg" } }, true, {})
+					end
+				end
+			})
+			-- Start insert mode in the terminal
+			vim.cmd("startinsert")
+		else
+			vim.api.nvim_echo({ { "Split cancelled", "Normal" } }, false, {})
+		end
+	end)
+end
+
 function Commands.commit_change()
 	local desc_cmd = { "jj", "log", "-r", "@", "--no-graph", "-T", "description" }
 	local current_description = vim.fn.system(desc_cmd)
@@ -729,6 +762,7 @@ Commands.abandon_change = Commands.abandon_change
 Commands.describe_change = Commands.describe_change
 Commands.new_change = Commands.new_change
 Commands.commit_change = Commands.commit_change
+Commands.split_change = Commands.split_change
 
 
 return Commands
