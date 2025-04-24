@@ -729,7 +729,7 @@ function Commands.split_change()
 	vim.bo[buf].buflisted = false
 
 	-- Open terminal in the floating window for the split TUI
-	vim.fn.termopen("jj split " .. change_id .. "-i", {
+	vim.fn.termopen("jj split -i " .. change_id, {
 		on_exit = function(_, code, _)
 			if vim.api.nvim_win_is_valid(win) then
 				vim.api.nvim_win_close(win, true)
