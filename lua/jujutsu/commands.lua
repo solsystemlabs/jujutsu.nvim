@@ -768,7 +768,7 @@ function Commands.split_change()
 	-- Wait briefly for terminal to initialize, then send the command
 	vim.defer_fn(function()
 		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id then
-			vim.fn.chansend(vim.b[buf].terminal_job_id, "jj split -i " .. change_id .. "\n")
+			vim.fn.chansend(vim.b[buf].terminal_job_id, "jj split -i -r " .. change_id .. "\n")
 		end
 	end, 100)
 
