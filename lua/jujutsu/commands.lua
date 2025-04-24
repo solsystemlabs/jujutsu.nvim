@@ -762,6 +762,17 @@ function Commands.split_change()
 				end
 				vim.api.nvim_echo({ { "Error splitting change " .. change_id .. ": " .. error_msg, "ErrorMsg" } }, true, {})
 			end
+		end,
+		on_stdout = function(_, data, _)
+			-- Check if the output indicates the split operation is complete
+			for _, line in ipairs(data) do
+				if line:match("Done") or line:match("Split complete") then
+					if vim.api.nvim_win_is_valid(win) then
+						vim.api.nvim_win_close(win, true)
+					end
+					break
+				end
+			end
 		end
 	})
 
