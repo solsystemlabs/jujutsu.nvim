@@ -730,7 +730,13 @@ function Commands.split_change()
 
 	-- Open terminal in the floating window for the split TUI
 	vim.fn.termopen("jj split -i " .. change_id, {
+		-- Ensure interactive mode works by setting up the environment
+		env = {
+			EDITOR = vim.env.EDITOR or "vim",
+			TERM = vim.env.TERM or "xterm-256color"
+		},
 		on_exit = function(_, code, _)
+			-- Check if window is still valid before closing
 			if vim.api.nvim_win_is_valid(win) then
 				vim.api.nvim_win_close(win, true)
 			end
@@ -740,9 +746,12 @@ function Commands.split_change()
 					M_ref.refresh_log()
 				end
 			else
-				-- Capture error output from the terminal buffer before closing
-				local error_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-				local error_msg = table.concat(error_lines, "\n")
+				-- Capture error output only if buffer is still valid
+				local error_msg = "Unknown error"
+				if vim.api.nvim_buf_is_valid(buf) then
+					local error_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+					error_msg = table.concat(error_lines, "\n")
+				end
 				vim.api.nvim_echo({ { "Error splitting change " .. change_id .. ": " .. error_msg, "ErrorMsg" } }, true, {})
 			end
 		end
