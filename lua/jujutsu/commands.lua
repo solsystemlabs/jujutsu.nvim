@@ -700,7 +700,7 @@ function Commands.split_change()
 	if not change_id then
 		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
 	end
-	
+
 	-- Open a terminal buffer for the split TUI
 	vim.cmd("belowright new")
 	local buf = vim.api.nvim_get_current_buf()
