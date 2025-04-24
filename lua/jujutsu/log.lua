@@ -158,6 +158,13 @@ function Log.refresh_log_buffer()
 		return
 	end
 
+	-- Check if a buffer with the name "JJ Log Viewer" already exists
+	local existing_buf = vim.fn.bufnr("JJ Log Viewer")
+	if existing_buf ~= -1 then
+		-- Delete the existing buffer if it exists
+		vim.api.nvim_buf_delete(existing_buf, { force = true })
+	end
+
 	-- Create the buffer that will hold the log content
 	local new_buf = vim.api.nvim_create_buf(false, true) -- false=not listed, true=scratch
 
