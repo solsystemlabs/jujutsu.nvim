@@ -34,6 +34,7 @@ end
 function M.setup()
 	-- Define options once
 	local opts = { noremap = true, silent = true }
+	-- test
 
 	-- Existing mappings
 	vim.keymap.set('n', '<leader>jl', function() Log.toggle_log_window() end,
