@@ -810,6 +810,43 @@ function Commands.commit_change()
 	end
 end
 
+-- Function to squash a change into its parent
+function Commands.squash_change()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = Utils.extract_change_id(line)
+	if not change_id then
+		vim.api.nvim_echo({ { "No change ID found on this line to squash.", "WarningMsg" } }, false, {}); return
+	end
+
+	-- Step 1: Select the squash mode
+	vim.ui.select(
+		{
+			"Squash non-interactively",
+			"Squash interactively",
+			"Cancel"
+		},
+		{
+			prompt = "Select squash mode for " .. change_id .. ":",
+		},
+		function(choice)
+			if choice == "Cancel" or choice == nil then
+				vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+				return
+			end
+
+			local cmd_parts = { "jj", "squash", "-r", change_id }
+			local success_msg = "Squashed change " .. change_id
+
+			if choice == "Squash interactively" then
+				table.insert(cmd_parts, "-i")
+				success_msg = success_msg .. " interactively"
+			end
+
+			execute_jj_command(cmd_parts, success_msg, true)
+		end
+	)
+end
+
 -- Function to rebase current branch onto master
 function Commands.rebase_onto_master()
 	local cmd_parts = { "jj", "rebase", "-b", "@", "-d", "master" }
@@ -833,6 +870,7 @@ Commands.describe_change = Commands.describe_change
 Commands.new_change = Commands.new_change
 Commands.commit_change = Commands.commit_change
 Commands.split_change = Commands.split_change
+Commands.squash_change = Commands.squash_change
 Commands.rebase_onto_master = Commands.rebase_onto_master
 
 return Commands
