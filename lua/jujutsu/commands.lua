@@ -701,11 +701,11 @@ function Commands.split_change()
 		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
 	end
 
-	-- Verify if the change has diffs to split
-	local diff_check = vim.fn.system("jj show " .. change_id)
-	if vim.v.shell_error ~= 0 or not diff_check:match("diff") then
-		vim.api.nvim_echo({ { "No changes to split in " .. change_id .. ".", "WarningMsg" } }, false, {}); return
-	end
+	-- -- Verify if the change has diffs to split
+	-- local diff_check = vim.fn.system("jj show " .. change_id)
+	-- if vim.v.shell_error ~= 0 or not diff_check:match("diff") then
+	-- 	vim.api.nvim_echo({ { "No changes to split in " .. change_id .. ".", "WarningMsg" } }, false, {}); return
+	-- end
 
 	-- Create a new buffer for the floating window
 	local buf = vim.api.nvim_create_buf(false, true)
