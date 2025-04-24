@@ -419,11 +419,14 @@ end
 -- - Whole branch: jj rebase -b <branch> -d <destination>
 -- - Change and descendants: jj rebase -s <source> -d <destination>
 function Commands.rebase_change()
-	local line = vim.api.nvim_get_current_line()
-	local source_id = Utils.extract_change_id(line)
+	local source_id
+	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+		local line = vim.api.nvim_get_current_line()
+		source_id = Utils.extract_change_id(line)
+	end
 	if not source_id then
-		vim.api.nvim_echo({ { "No change ID found on this line to rebase.", "WarningMsg" } }, false, {})
-		return
+		source_id = "@" -- Use current change if log window is not open or no ID found
+		vim.api.nvim_echo({ { "Using current change for rebase.", "Normal" } }, false, {})
 	end
 
 	-- Step 1: Select the scope of the rebase

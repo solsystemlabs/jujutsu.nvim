@@ -36,6 +36,7 @@ local log_keymaps_info = {
 	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
 	{ key = "p",  desc = "Push changes (jj git push)" },
 	{ key = "rb", desc = "[R]e[B]ase change" },
+	{ key = "Vsp", desc = "[S]plit change" },
 }
 
 local revset_templates = {
@@ -139,6 +140,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
 	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
 	map('rb', ':lua require("jujutsu").rebase_change()<CR>', "[R]e[B]ase change")
+	map('SVsp', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
