@@ -750,6 +750,13 @@ function Commands.commit_change()
 	end
 end
 
+-- Function to rebase current branch onto master
+function Commands.rebase_onto_master()
+	local cmd_parts = { "jj", "rebase", "-b", "@", "-d", "master" }
+	local success_msg = "Rebased current branch onto master"
+	execute_jj_command(cmd_parts, success_msg, true)
+end
+
 -- Initialize the module with a reference to the main state/module
 function Commands.init(main_module_ref)
 	M_ref = main_module_ref
@@ -766,6 +773,7 @@ Commands.describe_change = Commands.describe_change
 Commands.new_change = Commands.new_change
 Commands.commit_change = Commands.commit_change
 Commands.split_change = Commands.split_change
+Commands.rebase_onto_master = Commands.rebase_onto_master
 
 
 return Commands

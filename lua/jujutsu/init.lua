@@ -70,6 +70,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[R]e[B]ase Change" }, opts))
 	vim.keymap.set('n', '<leader>jS', function() Commands.split_change() end,
 		vim.tbl_extend('keep', { desc = "[S]plit Change" }, opts))
+	vim.keymap.set('n', '<leader>jrm', function() Commands.rebase_onto_master() end,
+		vim.tbl_extend('keep', { desc = "[R]ebase onto [M]aster" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -98,6 +100,7 @@ M.move_bookmark = Commands.move_bookmark
 M.git_push = Commands.git_push
 M.rebase_change = Commands.rebase_change
 M.split_change = Commands.split_change
+M.rebase_onto_master = Commands.rebase_onto_master
 
 
 -- Return the main module table M
