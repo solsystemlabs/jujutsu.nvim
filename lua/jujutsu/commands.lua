@@ -701,30 +701,24 @@ function Commands.split_change()
 		vim.api.nvim_echo({ { "No change ID found on this line to split.", "WarningMsg" } }, false, {}); return
 	end
 	
-	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to split change " .. change_id .. "?" }, function(choice)
-		if choice == "Yes" then
-			-- Open a terminal buffer for the split TUI
-			vim.cmd("belowright new")
-			local buf = vim.api.nvim_get_current_buf()
-			vim.api.nvim_buf_set_name(buf, "JJ Split TUI")
-			vim.fn.termopen("jj split " .. change_id, {
-				on_exit = function(_, code)
-					if code == 0 then
-						vim.api.nvim_echo({ { "Change " .. change_id .. " split successfully", "Normal" } }, false, {})
-						if M_ref and M_ref.refresh_log then
-							M_ref.refresh_log()
-						end
-					else
-						vim.api.nvim_echo({ { "Error splitting change " .. change_id, "ErrorMsg" } }, true, {})
-					end
+	-- Open a terminal buffer for the split TUI
+	vim.cmd("belowright new")
+	local buf = vim.api.nvim_get_current_buf()
+	vim.api.nvim_buf_set_name(buf, "JJ Split TUI")
+	vim.fn.termopen("jj split " .. change_id, {
+		on_exit = function(_, code)
+			if code == 0 then
+				vim.api.nvim_echo({ { "Change " .. change_id .. " split successfully", "Normal" } }, false, {})
+				if M_ref and M_ref.refresh_log then
+					M_ref.refresh_log()
 				end
-			})
-			-- Start insert mode in the terminal
-			vim.cmd("startinsert")
-		else
-			vim.api.nvim_echo({ { "Split cancelled", "Normal" } }, false, {})
+			else
+				vim.api.nvim_echo({ { "Error splitting change " .. change_id, "ErrorMsg" } }, true, {})
+			end
 		end
-	end)
+	})
+	-- Start insert mode in the terminal
+	vim.cmd("startinsert")
 end
 
 function Commands.commit_change()
