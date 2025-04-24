@@ -26,7 +26,7 @@ local log_keymaps_info = {
 	{ key = "n",  desc = "Create new change (jj new)" },
 	{ key = "a",  desc = "Abandon change (jj abandon)" },
 	{ key = "c",  desc = "Commit current change (jj commit)" },
-	{ key = "s",  desc = "Show status window (jj st)" },
+	{ key = "st", desc = "Show status window (jj st)" },
 	{ key = "l",  desc = "Set log entry limit (-n)" },
 	{ key = "r",  desc = "Set revset filter (-r)" },
 	{ key = "f",  desc = "Search in log (diff_contains)" },
@@ -36,7 +36,7 @@ local log_keymaps_info = {
 	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
 	{ key = "p",  desc = "Push changes (jj git push)" },
 	{ key = "rb", desc = "[R]e[B]ase change" },
-	{ key = "sp", desc = "[S]plit change" },
+	{ key = "s",  desc = "[S]plit change" },
 }
 
 local revset_templates = {
@@ -129,7 +129,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('d', ':lua require("jujutsu").describe_change()<CR>', "Edit change description")
 	map('n', ':lua require("jujutsu").new_change()<CR>', "Create new change")
 	map('a', ':lua require("jujutsu").abandon_change()<CR>', "Abandon change")
-	map('s', ':lua require("jujutsu").show_status()<CR>', "Show status")
+	map('st', ':lua require("jujutsu").show_status()<CR>', "Show status")
 	map('l', ':lua require("jujutsu").set_log_limit()<CR>', "Set log entry limit")
 	map('r', ':lua require("jujutsu").set_revset_filter()<CR>', "Set revset filter")
 	map('f', ':lua require("jujutsu").search_in_log()<CR>', "Search in log")
@@ -140,7 +140,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
 	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
 	map('rb', ':lua require("jujutsu").rebase_change()<CR>', "[R]e[B]ase change")
-	map('sp', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
+	map('s', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
