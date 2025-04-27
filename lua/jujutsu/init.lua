@@ -102,6 +102,7 @@ M.git_push = Commands.git_push
 M.rebase_change = Commands.rebase_change
 M.split_change = Commands.split_change
 M.rebase_onto_master = Commands.rebase_onto_master
+M.show_diff = Commands.show_diff
 
 
 -- Return the main module table M
