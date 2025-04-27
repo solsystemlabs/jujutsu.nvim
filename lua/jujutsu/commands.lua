@@ -873,11 +873,22 @@ function Commands.show_diff()
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].filetype = "diff"
 	
-	-- Create a vertical split window for the diff
-	vim.cmd("botright vsplit")
-	local win = vim.api.nvim_get_current_win()
-	vim.cmd("vertical resize 80")
-	vim.api.nvim_win_set_buf(win, buf)
+	-- Calculate dimensions for the floating window
+	local width = math.floor(vim.o.columns * 0.8)
+	local height = math.floor(vim.o.lines * 0.8)
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+	
+	-- Open a floating window
+	local win = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+	})
 	
 	-- Run the jj diff command
 	local cmd = { "jj", "diff", "-r", change_id }
@@ -889,6 +900,19 @@ function Commands.show_diff()
 			end
 		end
 	})
+	
+	-- Set keymaps for closing the floating window
+	local opts = { noremap = true, silent = true, buffer = buf }
+	vim.keymap.set('n', 'q', function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end, opts)
+	vim.keymap.set('n', '<Esc>', function()
+		if vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_close(win, true)
+		end
+	end, opts)
 end
 
 -- Initialize the module with a reference to the main state/module
