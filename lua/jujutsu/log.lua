@@ -38,6 +38,7 @@ local log_keymaps_info = {
 	{ key = "rb", desc = "[R]e[B]ase change" },
 	{ key = "rm", desc = "[R]ebase onto [M]aster" },
 	{ key = "s",  desc = "[S]plit change" },
+	{ key = "df", desc = "Show [D]iff of current change" },
 }
 
 local revset_templates = {
@@ -143,6 +144,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('rb', ':lua require("jujutsu").rebase_change()<CR>', "[R]e[B]ase change")
 	map('rm', ':lua require("jujutsu").rebase_onto_master()<CR>', "[R]ebase onto [M]aster")
 	map('s', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
+	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings

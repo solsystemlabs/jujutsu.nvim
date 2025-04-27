@@ -854,12 +854,49 @@ function Commands.rebase_onto_master()
 	execute_jj_command(cmd_parts, success_msg, true)
 end
 
+-- Function to show diff of a change
+function Commands.show_diff()
+	local line = vim.api.nvim_get_current_line()
+	local change_id = Utils.extract_change_id(line)
+	if not change_id then
+		change_id = "@" -- Default to current working copy if no change ID is selected
+		vim.api.nvim_echo({ { "Showing diff for current working copy", "Normal" } }, false, {})
+	end
+	
+	-- Create a new buffer for the diff output
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf, "JJ Diff Viewer - " .. change_id)
+	
+	-- Set buffer options
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "hide"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].filetype = "diff"
+	
+	-- Create a vertical split window for the diff
+	vim.cmd("botright vsplit")
+	local win = vim.api.nvim_get_current_win()
+	vim.cmd("vertical resize 80")
+	vim.api.nvim_win_set_buf(win, buf)
+	
+	-- Run the jj diff command
+	local cmd = { "jj", "diff", "-r", change_id }
+	vim.fn.termopen(cmd, {
+		on_exit = function()
+			if vim.api.nvim_win_is_valid(win) then
+				vim.bo[buf].modifiable = false
+				vim.bo[buf].readonly = true
+			end
+		end
+	})
+end
+
 -- Initialize the module with a reference to the main state/module
 function Commands.init(main_module_ref)
 	M_ref = main_module_ref
 end
 
--- Expose functions (including git_push)
+-- Expose functions (including git_push and show_diff)
 Commands.create_bookmark = Commands.create_bookmark
 Commands.delete_bookmark = Commands.delete_bookmark
 Commands.move_bookmark = Commands.move_bookmark
@@ -872,5 +909,6 @@ Commands.commit_change = Commands.commit_change
 Commands.split_change = Commands.split_change
 Commands.squash_change = Commands.squash_change
 Commands.rebase_onto_master = Commands.rebase_onto_master
+Commands.show_diff = Commands.show_diff
 
 return Commands
