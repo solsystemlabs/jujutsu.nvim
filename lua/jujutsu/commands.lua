@@ -64,7 +64,12 @@ local function get_bookmark_names()
 	for _, line in ipairs(output) do
 		local name = line:match("^([^:]+):")
 		if name then
-			table.insert(names, name:gsub("%s+$", ""))
+			local cleaned_name = name:gsub("%s+$", "")
+			if type(cleaned_name) == "string" then
+				table.insert(names, cleaned_name)
+			else
+				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
+			end
 		end
 	end
 	return names
