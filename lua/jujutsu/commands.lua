@@ -42,7 +42,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		local err_output = vim.fn.system(command_str .. " 2>&1")
 		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
 		local error_text = format_error_output(err_output, vim.v.shell_error)
-		table.insert(msg_chunks, { error_text, "ErrorMsg" } })
+		table.insert(msg_chunks, { error_text, "ErrorMsg" })
 		vim.api.nvim_echo(msg_chunks, true, {})
 		return false
 	end
@@ -394,7 +394,7 @@ local function move_bookmark_to_change(name, change_id)
 		else
 			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { cmd_str .. "\n", "Code" } }
 			local error_text = format_error_output(output, vim.v.shell_error)
-			table.insert(msg_chunks, { error_text, "ErrorMsg" } })
+			table.insert(msg_chunks, { error_text, "ErrorMsg" })
 			vim.api.nvim_echo(msg_chunks, true, {})
 		end
 	end
