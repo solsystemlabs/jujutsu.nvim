@@ -29,47 +29,41 @@ local function format_error_output(output, shell_error_code)
 	return error_text:gsub("[\n\r]+$", "")
 end
 
-
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
 local function execute_jj_command(command_parts, success_message, refresh_log)
 	if type(command_parts) ~= "table" then
 		vim.api.nvim_echo({ { "Internal Error: execute_jj_command requires a table.", "ErrorMsg" } }, true, {})
-		return false -- Indicate failure
+		return false
 	end
 	local command_str = table.concat(command_parts, " ")
-	vim.fn.system(command_parts) -- Execute silently
+	vim.fn.system(command_parts)
 	if vim.v.shell_error ~= 0 then
 		local err_output = vim.fn.system(command_str .. " 2>&1")
 		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
 		local error_text = format_error_output(err_output, vim.v.shell_error)
-		table.insert(msg_chunks, { error_text, "ErrorMsg" })
+		table.insert(msg_chunks, { error_text, "ErrorMsg" } })
 		vim.api.nvim_echo(msg_chunks, true, {})
-		return false -- Indicate failure
+		return false
 	end
 	if success_message then vim.api.nvim_echo({ { success_message, "Normal" } }, false, {}) end
-	if refresh_log then
-		if M_ref and M_ref.refresh_log then
-			M_ref.refresh_log()
-		else
-			vim.api.nvim_echo(
-				{ { "Internal Error: M_ref not initialized for refresh.", "ErrorMsg" } }, true, {})
-		end
+	if refresh_log and M_ref and M_ref.refresh_log then
+		M_ref.refresh_log()
 	end
-	return true -- Indicate success
+	return true
 end
 
 -- Helper function to get existing bookmark names
--- (Unchanged)
 local function get_bookmark_names()
 	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
 	if vim.v.shell_error ~= 0 then
-		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {}); return nil
+		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
+		return nil
 	end
 	local names = {}
 	for _, line in ipairs(output) do
 		local name = line:match("^([^:]+):")
-		if name then table.insert(names, (name:gsub("%s+$", ""))) end -- Parentheses fix included
+		if name then table.insert(names, name:gsub("%s+$", "")) end
 	end
 	return names
 end
@@ -81,11 +75,7 @@ local function format_changes_for_selection(changes)
 	for _, change_line in ipairs(changes) do
 		local change_id = Utils.extract_change_id(change_line)
 		if change_id then
-			-- Get description (the part after email)
-			local desc = change_line:match(".*@.-%.%w+%s+(.*)")
-			if not desc or desc == "" then
-				desc = "(no description)"
-			end
+			local desc = change_line:match(".*@.-%.%w+%s+(.*)") or "(no description)"
 			table.insert(options, change_id .. " - " .. desc)
 			table.insert(change_ids, change_id)
 		end
@@ -93,10 +83,9 @@ local function format_changes_for_selection(changes)
 	return options, change_ids
 end
 
--- Helper function to get a list of changes for selection
-local function display_change_list_for_selection(callback, limit)
+-- Helper function to select a change from a list
+local function select_change(callback, limit)
 	limit = limit or 15
-	-- Run jj log to get a list of recent changes
 	local cmd = "jj log -n " .. limit .. " --no-graph"
 	local changes = vim.fn.systemlist(cmd)
 	if vim.v.shell_error ~= 0 or #changes == 0 then
@@ -105,11 +94,8 @@ local function display_change_list_for_selection(callback, limit)
 	end
 
 	local options, change_ids = format_changes_for_selection(changes)
-	-- Let user select a change
-	vim.ui.select(options, {
-		prompt = "Select target change:",
-	}, function(choice, idx)
-		if choice and idx and change_ids[idx] then
+	vim.ui.select(options, { prompt = "Select target change:" }, function(_, idx)
+		if idx and change_ids[idx] then
 			callback(change_ids[idx])
 		else
 			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
@@ -120,43 +106,27 @@ end
 -- Helper function to setup log window selection mapping
 local function setup_log_selection_mapping(buf, current_win, callback)
 	local opts = { noremap = true, silent = true, buffer = buf }
-
-	-- Store the original mapping if it exists
 	local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
 
-	-- Set temporary mapping
 	vim.keymap.set("n", "<CR>", function()
-		-- Get the current line
 		local line = vim.api.nvim_get_current_line()
 		local selected_id = Utils.extract_change_id(line)
-
-		-- Reset the mapping
 		vim.keymap.del("n", "<CR>", { buffer = buf })
 
-		-- Restore original mapping if it existed
 		if original_cr_mapping and original_cr_mapping.buffer then
-			local restore_cmd = original_cr_mapping.mode .. "map"
-			if original_cr_mapping.noremap == 1 then
-				restore_cmd = original_cr_mapping.mode .. "noremap"
-			end
-			if original_cr_mapping.silent == 1 then
-				restore_cmd = restore_cmd .. " <silent>"
-			end
+			local restore_cmd = original_cr_mapping.mode .. (original_cr_mapping.noremap == 1 and "noremap" or "map")
+			if original_cr_mapping.silent == 1 then restore_cmd = restore_cmd .. " <silent>" end
 			vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
 		end
 
-		-- Return to the original window
 		if vim.api.nvim_win_is_valid(current_win) then
 			vim.api.nvim_set_current_win(current_win)
 		end
 
-		-- Call the callback with the selected ID
 		if selected_id then
 			callback(selected_id)
 		else
-			vim.api.nvim_echo({
-				{ "No valid change ID found on that line", "WarningMsg" }
-			}, false, {})
+			vim.api.nvim_echo({ { "No valid change ID found on that line", "WarningMsg" } }, false, {})
 			callback(nil)
 		end
 	end, opts)
@@ -164,38 +134,26 @@ end
 
 -- Helper function to select a change from log window
 local function select_from_log_window(callback, prompt)
-	-- If the log window isn't open, open it first
+	local log_module = require("jujutsu.log")
 	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
-		-- Save current window
 		local current_win = vim.api.nvim_get_current_win()
-
-		-- Open log window
-		local log_module = require("jujutsu.log")
 		log_module.toggle_log_window()
-
-		-- Provide instructions
 		vim.api.nvim_echo({
 			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
+			{ "Enter", "Special" },
+			{ " to confirm", "Normal" }
 		}, true, {})
-
-		-- Set up a temporary mapping for Enter key in log window
 		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 			setup_log_selection_mapping(buf, current_win, callback)
 		end
-
-		return -- Exit here, the callback will continue the flow
+		return
 	else
-		-- Log window is already open, just provide instructions
 		vim.api.nvim_echo({
 			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
+			{ "Enter", "Special" },
+			{ " to confirm", "Normal" }
 		}, true, {})
-
-		-- Set up a temporary mapping for Enter key in log window
 		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 		local current_win = vim.api.nvim_get_current_win()
 		setup_log_selection_mapping(buf, current_win, callback)
