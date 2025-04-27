@@ -19,6 +19,7 @@ M.status_buf = nil
 ---@type number|nil
 M.status_win = nil
 M.log_settings = { limit = "", revset = "", template = "", search_pattern = "" }
+M.is_operation_log = false
 
 -- Initialize submodules... (unchanged)
 Log.init(M); Status.init(M); Commands.init(M)
@@ -73,6 +74,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[S]plit Change" }, opts))
 	vim.keymap.set('n', '<leader>jrm', function() Commands.rebase_onto_master() end,
 		vim.tbl_extend('keep', { desc = "[R]ebase onto [M]aster" }, opts))
+	vim.keymap.set('n', '<leader>jol', function() Log.toggle_operation_log() end,
+		vim.tbl_extend('keep', { desc = "[O]peration [L]og Toggle" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -103,6 +106,7 @@ M.rebase_change = Commands.rebase_change
 M.split_change = Commands.split_change
 M.rebase_onto_master = Commands.rebase_onto_master
 M.show_diff = Commands.show_diff
+M.toggle_operation_log = Log.toggle_operation_log
 
 
 -- Return the main module table M

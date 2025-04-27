@@ -39,6 +39,7 @@ local log_keymaps_info = {
 	{ key = "rm", desc = "[R]ebase onto [M]aster" },
 	{ key = "s",  desc = "[S]plit change" },
 	{ key = "df", desc = "Show [D]iff of current change" },
+	{ key = "ol", desc = "Toggle [O]peration [L]og" },
 }
 
 local revset_templates = {
@@ -145,6 +146,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('rm', ':lua require("jujutsu").rebase_onto_master()<CR>', "[R]ebase onto [M]aster")
 	map('s', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
+	map('ol', ':lua require("jujutsu").toggle_operation_log()<CR>', "Toggle [O]peration [L]og")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
@@ -160,8 +162,9 @@ function Log.refresh_log_buffer()
 		return
 	end
 
-	-- Check if a buffer with the name "JJ Log Viewer" already exists
-	local existing_buf = vim.fn.bufnr("JJ Log Viewer")
+	-- Check if a buffer with the name already exists
+	local buffer_name = M_ref.is_operation_log and "JJ Operation Log Viewer" or "JJ Log Viewer"
+	local existing_buf = vim.fn.bufnr(buffer_name)
 	if existing_buf ~= -1 then
 		-- Delete the existing buffer if it exists
 		vim.api.nvim_buf_delete(existing_buf, { force = true })
@@ -171,7 +174,7 @@ function Log.refresh_log_buffer()
 	local new_buf = vim.api.nvim_create_buf(false, true) -- false=not listed, true=scratch
 
 	-- Set the name directly on the buffer object
-	vim.api.nvim_buf_set_name(new_buf, "JJ Log Viewer")
+	vim.api.nvim_buf_set_name(new_buf, buffer_name)
 
 	-- Set useful options for a log buffer
 	vim.bo[new_buf].buftype = "nofile" -- Not related to a file on disk
@@ -186,25 +189,26 @@ function Log.refresh_log_buffer()
 	M_ref.log_buf = new_buf
 
 	-- Build the command parts...
-	local cmd_parts = { "jj", "log" }
-	local revset_parts = {}
-	if M_ref.log_settings.revset ~= "" then table.insert(revset_parts, "(" .. M_ref.log_settings.revset .. ")") end
-	if M_ref.log_settings.search_pattern ~= "" then
-		table.insert(revset_parts,
-			"diff_contains(" .. vim.fn.shellescape(M_ref.log_settings.search_pattern) .. ")")
-	end
-	if #revset_parts > 0 then
-		table.insert(cmd_parts, "-r"); table.insert(cmd_parts, vim.fn.shellescape(table.concat(revset_parts, " & ")))
-	end
-	local limit_num = tonumber(M_ref.log_settings.limit)
-	if limit_num and limit_num > 0 then
-		table.insert(cmd_parts, "-n"); table.insert(cmd_parts, M_ref.log_settings.limit)
-	end
-	if M_ref.log_settings.template ~= "" then
-		table.insert(cmd_parts, "-T"); table.insert(cmd_parts, vim.fn.shellescape(M_ref.log_settings.template))
+	local cmd_parts = M_ref.is_operation_log and { "jj", "op", "log" } or { "jj", "log" }
+	if not M_ref.is_operation_log then
+		local revset_parts = {}
+		if M_ref.log_settings.revset ~= "" then table.insert(revset_parts, "(" .. M_ref.log_settings.revset .. ")") end
+		if M_ref.log_settings.search_pattern ~= "" then
+			table.insert(revset_parts,
+				"diff_contains(" .. vim.fn.shellescape(M_ref.log_settings.search_pattern) .. ")")
+		end
+		if #revset_parts > 0 then
+			table.insert(cmd_parts, "-r"); table.insert(cmd_parts, vim.fn.shellescape(table.concat(revset_parts, " & ")))
+		end
+		local limit_num = tonumber(M_ref.log_settings.limit)
+		if limit_num and limit_num > 0 then
+			table.insert(cmd_parts, "-n"); table.insert(cmd_parts, M_ref.log_settings.limit)
+		end
+		if M_ref.log_settings.template ~= "" then
+			table.insert(cmd_parts, "-T"); table.insert(cmd_parts, vim.fn.shellescape(M_ref.log_settings.template))
+		end
 	end
 	local final_cmd = table.concat(cmd_parts, " ")
-
 
 	-- Run the terminal command in the buffer
 	vim.fn.termopen(final_cmd, {
@@ -642,9 +646,19 @@ function Log.init(main_module_ref)
 	M_ref = main_module_ref
 end
 
+-- Function to toggle between regular log and operation log
+function Log.toggle_operation_log()
+	M_ref.is_operation_log = not M_ref.is_operation_log
+	vim.api.nvim_echo({ { "Switched to " .. (M_ref.is_operation_log and "Operation Log" or "Regular Log"), "Normal" } }, false, {})
+	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+		Log.refresh_log_buffer()
+	end
+end
+
 -- *** ADDED: Expose the new help functions ***
 Log.toggle_help_window = Log.toggle_help_window
 Log.close_help_window = Log.close_help_window
+Log.toggle_operation_log = Log.toggle_operation_log
 
 
 return Log
