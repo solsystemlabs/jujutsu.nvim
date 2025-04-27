@@ -63,7 +63,9 @@ local function get_bookmark_names()
 	local names = {}
 	for _, line in ipairs(output) do
 		local name = line:match("^([^:]+):")
-		if name then table.insert(names, name:gsub("%s+$", "")) end
+		if name then
+			table.insert(names, name:gsub("%s+$", ""))
+		end
 	end
 	return names
 end
@@ -446,7 +448,9 @@ function Commands.move_bookmark()
 	end
 	local existing_bookmarks = get_bookmark_names() or {}
 	local options = {}
-	for _, name in ipairs(existing_bookmarks) do table.insert(options, name) end
+	for _, name in ipairs(existing_bookmarks) do
+		table.insert(options, name)
+	end
 	table.insert(options, "Create new bookmark...")
 
 	vim.ui.select(options, { prompt = "Select bookmark to move or create new:" }, function(selected)
