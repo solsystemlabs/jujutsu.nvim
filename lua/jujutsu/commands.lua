@@ -128,7 +128,7 @@ local function get_bookmark_names()
 			-- This line contains remote tracking info for the current bookmark (indented)
 			local full_remote = line:match("^%s+([^%(]+)") or line
 			local remote_part = full_remote:match("@[^%s%(]+") or ""
-			local display_name = current_bookmark .. " " .. full_remote
+			local display_name = current_bookmark .. full_remote
 			local constructed_name = current_bookmark .. remote_part
 			table.insert(names, display_name)
 			bookmark_map[display_name] = constructed_name
