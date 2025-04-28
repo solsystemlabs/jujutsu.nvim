@@ -268,8 +268,8 @@ function Commands.new_change()
 			local option_idx = line_nr - 5
 			if option_idx > #options then return end
 			selected[option_idx] = not selected[option_idx]
-			local marker = selected[option_idx] and "x" or " "
-			local new_line = "[" .. marker .. "] " .. options[option_idx]
+			local marker = selected[option_idx] and "●" or "○"
+			local new_line = marker .. " " .. options[option_idx]
 			vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
 		end
 
@@ -302,8 +302,8 @@ function Commands.new_change()
 		vim.api.nvim_win_set_option(win, 'cursorline', true)
 		vim.api.nvim_set_current_buf(buf)
 		vim.cmd('syntax match Comment /^#.*/')
-		vim.cmd('syntax match Selected /\\[x\\]/')
-		vim.cmd('highlight link Selected String')
+		vim.cmd('syntax match Selected /●/')
+		vim.cmd('highlight Selected guifg=Red')
 	end
 
 	-- Show advanced options dialog
@@ -656,7 +656,7 @@ function Commands.abandon_multiple_changes()
 		for i, ln in ipairs(line_numbers) do
 			if ln == line_nr then
 				selected[i] = not selected[i]
-				local marker = selected[i] and "[x] " or "[ ] "
+				local marker = selected[i] and "● " or "○ "
 				local new_line = marker .. change_lines[i]
 				-- Temporarily make buffer modifiable
 				vim.bo[log_buf].modifiable = true
@@ -731,6 +731,10 @@ function Commands.abandon_multiple_changes()
 
 	vim.api.nvim_win_set_option(M_ref.log_win, 'cursorline', true)
 	vim.api.nvim_set_current_win(M_ref.log_win)
+	-- Define a highlight group for the selected marker
+	vim.cmd('highlight JujutsuSelected guifg=Red')
+	-- Apply syntax highlighting to the selected marker
+	vim.cmd('syntax match JujutsuSelected /●/')
 end
 
 function Commands.describe_change()

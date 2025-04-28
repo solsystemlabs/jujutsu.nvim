@@ -39,7 +39,7 @@ function Utils.create_selection_buffer(title, options)
 
 	-- Add each option with a checkbox
 	for _, option in ipairs(options) do
-		table.insert(content, "[ ] " .. option)
+		table.insert(content, "○ " .. option)
 	end
 
 	-- Set the content
