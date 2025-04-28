@@ -110,18 +110,31 @@ local function get_bookmark_names()
 		return nil
 	end
 	local names = {}
+	local bookmark_map = {}
+	local current_bookmark = nil
 	for _, line in ipairs(output) do
-		local name = line:match("^([^:]+):")
-		if name then
-			local cleaned_name = name:gsub("%s+$", "")
+		if line:match("^%s*[^%s%(]+%s*:") then
+			-- This line contains a bookmark name (not indented much, before a colon)
+			local full_name = line:sub(1, line:find(":") - 1)
+			local cleaned_name = full_name:match("^%s*([^%s%(]+)") or full_name
 			if type(cleaned_name) == "string" then
-				table.insert(names, cleaned_name)
+				table.insert(names, full_name)
+				bookmark_map[full_name] = cleaned_name
+				current_bookmark = cleaned_name
 			else
 				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
+		elseif current_bookmark and line:match("^%s+@") then
+			-- This line contains remote tracking info for the current bookmark (indented)
+			local full_remote = line:match("^%s+([^%(]+)") or line
+			local remote_part = full_remote:match("@[^%s%(]+") or ""
+			local display_name = current_bookmark .. " " .. full_remote
+			local constructed_name = current_bookmark .. remote_part
+			table.insert(names, display_name)
+			bookmark_map[display_name] = constructed_name
 		end
 	end
-	return names
+	return names, bookmark_map
 end
 
 -- Helper function to format changes for selection UI
@@ -377,19 +390,23 @@ function Commands.rebase_change()
 		             scope_choice == "Rebase whole branch" and "-b" or "-s"
 
 		local function execute_rebase_command(dest_id, position_flag)
+			-- Clean the dest_id by removing any additional text after @origin like "(behind by X commits)"
+			local clean_dest_id = dest_id:match("^([^%(]+)") or dest_id
+			-- Further clean to handle spaces and additional info, taking everything before any parenthetical
+			clean_dest_id = clean_dest_id:gsub("%s+$", "") -- Trim trailing spaces
 			local cmd_parts = { "jj", "rebase", flag, source_id }
 			if position_flag == "--insert-before" then
 				table.insert(cmd_parts, "--before")
-				table.insert(cmd_parts, dest_id)
+				table.insert(cmd_parts, clean_dest_id)
 			elseif position_flag == "--insert-after" then
 				table.insert(cmd_parts, "--after")
-				table.insert(cmd_parts, dest_id)
+				table.insert(cmd_parts, clean_dest_id)
 			else
 				table.insert(cmd_parts, "-d")
-				table.insert(cmd_parts, dest_id)
+				table.insert(cmd_parts, clean_dest_id)
 			end
 			local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
-			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. position_text .. " " .. dest_id, true)
+			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. position_text .. " " .. clean_dest_id, true)
 		end
 
 		vim.ui.select({
@@ -425,13 +442,16 @@ function Commands.rebase_change()
 					if dest_id then handle_destination_selection(dest_id) end
 				end, "Select destination change for rebase, then press ")
 			else
-				local bookmark_names = get_bookmark_names() or {}
-				if #bookmark_names == 0 then
+				local bookmark_names, bookmark_map = get_bookmark_names()
+				if not bookmark_names or #bookmark_names == 0 then
 					vim.api.nvim_echo({ { "No bookmarks found to rebase onto.", "WarningMsg" } }, false, {})
 					return
 				end
-				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark)
-					if bookmark then handle_destination_selection(bookmark) end
+				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark_full)
+					if bookmark_full then 
+						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+						handle_destination_selection(bookmark)
+					end
 				end)
 			end
 		end)
