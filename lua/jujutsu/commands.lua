@@ -382,7 +382,8 @@ function Commands.rebase_change()
 			if position_flag then
 				table.insert(cmd_parts, position_flag)
 			end
-			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. (position_flag or "onto") .. " " .. dest_id, true)
+			local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
+			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. position_text .. " " .. dest_id, true)
 		end
 
 		vim.ui.select({
