@@ -238,6 +238,8 @@ function Log.refresh_log_buffer()
 			vim.bo[current_log_buf].modifiable = false
 			vim.bo[current_log_buf].readonly = true
 			setup_log_buffer_keymaps(current_log_buf)
+			-- Apply syntax highlighting
+			vim.cmd("AnsiEsc")
 		end
 	})
 end

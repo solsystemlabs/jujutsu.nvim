@@ -26,8 +26,13 @@ Log.init(M); Status.init(M); Commands.init(M)
 
 -- Delegate log refresh calls... (unchanged)
 function M.refresh_log()
-	if M.log_win and vim.api.nvim_win_is_valid(M.log_win) then
-		Log.refresh_log_buffer()
+	if M.log_win then
+		-- Defer the check and refresh to avoid fast event context issues
+		vim.defer_fn(function()
+			if M.log_win and vim.api.nvim_win_is_valid(M.log_win) then
+				Log.refresh_log_buffer()
+			end
+		end, 0)
 	end
 end
 
