@@ -658,7 +658,13 @@ function Commands.abandon_multiple_changes()
 				selected[i] = not selected[i]
 				local marker = selected[i] and "[x] " or "[ ] "
 				local new_line = marker .. change_lines[i]
+				-- Temporarily make buffer modifiable
+				vim.bo[log_buf].modifiable = true
+				vim.bo[log_buf].readonly = false
 				vim.api.nvim_buf_set_lines(log_buf, ln - 1, ln, false, { new_line })
+				-- Restore read-only status
+				vim.bo[log_buf].modifiable = false
+				vim.bo[log_buf].readonly = true
 				return
 			end
 		end
@@ -669,8 +675,14 @@ function Commands.abandon_multiple_changes()
 		for i, is_selected in ipairs(selected) do
 			if is_selected then table.insert(result, change_ids[i]) end
 		end
+		-- Temporarily make buffer modifiable to restore lines
+		vim.bo[log_buf].modifiable = true
+		vim.bo[log_buf].readonly = false
 		-- Restore original lines
 		vim.api.nvim_buf_set_lines(log_buf, 0, -1, false, original_lines)
+		-- Restore read-only status
+		vim.bo[log_buf].modifiable = false
+		vim.bo[log_buf].readonly = true
 		-- Clear keymaps
 		vim.keymap.del('n', '<Space>', { buffer = log_buf })
 		vim.keymap.del('n', '<CR>', { buffer = log_buf })
@@ -695,8 +707,14 @@ function Commands.abandon_multiple_changes()
 	end
 
 	local function cancel_selection()
+		-- Temporarily make buffer modifiable to restore lines
+		vim.bo[log_buf].modifiable = true
+		vim.bo[log_buf].readonly = false
 		-- Restore original lines
 		vim.api.nvim_buf_set_lines(log_buf, 0, -1, false, original_lines)
+		-- Restore read-only status
+		vim.bo[log_buf].modifiable = false
+		vim.bo[log_buf].readonly = true
 		-- Clear keymaps
 		vim.keymap.del('n', '<Space>', { buffer = log_buf })
 		vim.keymap.del('n', '<CR>', { buffer = log_buf })
