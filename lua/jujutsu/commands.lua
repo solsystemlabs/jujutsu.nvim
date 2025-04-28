@@ -50,7 +50,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		if code == 0 then
 			success = true
 			local message = output ~= "" and output or (success_message or "Command completed successfully.")
-			vim.notify(message, vim.log.levels.INFO, { title = "Jujutsu" })
+			vim.notify(tostring(message), vim.log.levels.INFO, { title = "Jujutsu" })
 			if refresh_log and M_ref and M_ref.refresh_log then
 				-- Defer the refresh to avoid fast event context issues
 				vim.defer_fn(function()
@@ -58,10 +58,9 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 				end, 0)
 			end
 		else
-			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
 			local error_text = format_error_output(error_output, code)
-			table.insert(msg_chunks, { error_text, "ErrorMsg" })
-			vim.notify(msg_chunks, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+			local error_message = "Error executing: " .. (command_str or "<missing command>") .. "\n" .. error_text
+			vim.notify(error_message, vim.log.levels.ERROR, { title = "Jujutsu Error" })
 		end
 	end
 	
@@ -444,7 +443,7 @@ function Commands.git_push()
 			local error_output = obj.stderr or ""
 			if obj.code == 0 then
 				local message = output ~= "" and output or "jj git push completed successfully (no output)."
-				vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
+				vim.notify(tostring(message), vim.log.levels.INFO, { title = "jj git push" })
 				if M_ref and M_ref.refresh_log then
 					-- Defer the refresh to avoid fast event context issues
 					vim.defer_fn(function()
@@ -453,7 +452,7 @@ function Commands.git_push()
 				end
 			else
 				local error_message = error_output ~= "" and error_output or "(No error output captured, shell error: " .. obj.code .. ")"
-				vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
+				vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git push Error" })
 			end
 		end)
 	else
@@ -463,11 +462,11 @@ function Commands.git_push()
 
 		if shell_error_code == 0 then
 			local message = output_string ~= "" and output_string or "jj git push completed successfully (no output)."
-			vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
+			vim.notify(tostring(message), vim.log.levels.INFO, { title = "jj git push" })
 			if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
 		else
 			local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
-			vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
+			vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git push Error" })
 		end
 	end
 end
