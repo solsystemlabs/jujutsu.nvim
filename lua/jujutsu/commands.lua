@@ -379,8 +379,10 @@ function Commands.rebase_change()
 		local function execute_rebase_command(dest_id, position_flag)
 			local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
 			if position_flag then
-				table.insert(cmd_parts, position_flag)
-			end
+				-- Remove the position flag from the command as it's not needed with -d
+				-- jj rebase -r source -d dest is sufficient for positioning
+				-- If needed in future, we can add additional logic
+			}
 			local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
 			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. position_text .. " " .. dest_id, true)
 		end
