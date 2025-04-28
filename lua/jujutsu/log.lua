@@ -39,6 +39,7 @@ local log_keymaps_info = {
 	{ key = "rm", desc = "[R]ebase onto [M]aster" },
 	{ key = "s",  desc = "[S]plit change" },
 	{ key = "sq", desc = "[S]quash change" },
+	{ key = "sw", desc = "[S]quash [W]orkflow" },
 	{ key = "df", desc = "Show [D]iff of current change" },
 	{ key = "ol", desc = "Toggle [O]peration [L]og" },
 }
@@ -147,6 +148,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('rm', ':lua require("jujutsu").rebase_onto_master()<CR>', "[R]ebase onto [M]aster")
 	map('s', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
 	map('sq', ':lua require("jujutsu").squash_change()<CR>', "[S]quash change")
+	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 	map('ol', ':lua require("jujutsu").toggle_operation_log()<CR>', "Toggle [O]peration [L]og")
 end

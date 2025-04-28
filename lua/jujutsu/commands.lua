@@ -632,7 +632,7 @@ function Commands.squash_change()
 	end)
 end
 
-function Commands.squash_change()
+function Commands.squash_workflow()
 	local change_id = Utils.extract_change_id(vim.api.nvim_get_current_line())
 	if not change_id then
 		vim.api.nvim_echo({ { "No change ID found on this line to squash.", "WarningMsg" } }, false, {})
@@ -640,22 +640,104 @@ function Commands.squash_change()
 	end
 
 	vim.ui.select({
-		"Squash non-interactively",
-		"Squash interactively",
+		"Squash into parent (default)",
+		"Squash into specific revision",
+		"Squash with custom options",
 		"Cancel"
-	}, { prompt = "Select squash mode for " .. change_id .. ":" }, function(choice)
-		if choice == "Cancel" or not choice then
-			vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+	}, { prompt = "Select squash workflow for " .. change_id .. ":" }, function(workflow)
+		if workflow == "Cancel" or not workflow then
+			vim.api.nvim_echo({ { "Squash workflow cancelled", "Normal" } }, false, {})
 			return
 		end
 
-		local cmd_parts = { "jj", "squash", "-r", change_id }
-		local success_msg = "Squashed change " .. change_id
-		if choice == "Squash interactively" then
-			table.insert(cmd_parts, "-i")
-			success_msg = success_msg .. " interactively"
+		if workflow == "Squash into parent (default)" then
+			vim.ui.select({
+				"Non-interactively",
+				"Interactively",
+				"Cancel"
+			}, { prompt = "Select mode for squashing into parent:" }, function(mode)
+				if mode == "Cancel" or not mode then
+					vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+					return
+				end
+
+				local cmd_parts = { "jj", "squash", "-r", change_id }
+				local success_msg = "Squashed change " .. change_id .. " into parent"
+				if mode == "Interactively" then
+					table.insert(cmd_parts, "-i")
+					success_msg = success_msg .. " interactively"
+				end
+				execute_jj_command(cmd_parts, success_msg, true)
+			end)
+		elseif workflow == "Squash into specific revision" then
+			vim.ui.input({ prompt = "Enter target revision for squash (default: parent): ", default = "" }, function(target)
+				if target == nil then
+					vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+					return
+				end
+
+				local cmd_parts = { "jj", "squash", "-r", change_id }
+				local success_msg = "Squashed change " .. change_id
+				if target ~= "" then
+					table.insert(cmd_parts, "-d")
+					table.insert(cmd_parts, target)
+					success_msg = success_msg .. " into " .. target
+				else
+					success_msg = success_msg .. " into parent"
+				end
+
+				vim.ui.select({
+					"Non-interactively",
+					"Interactively",
+					"Cancel"
+				}, { prompt = "Select mode for squashing:" }, function(mode)
+					if mode == "Cancel" or not mode then
+						vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+						return
+					end
+
+					if mode == "Interactively" then
+						table.insert(cmd_parts, "-i")
+						success_msg = success_msg .. " interactively"
+					end
+					execute_jj_command(cmd_parts, success_msg, true)
+				end)
+			end)
+		elseif workflow == "Squash with custom options" then
+			vim.ui.input({ prompt = "Enter custom squash options (e.g., -m 'message'): ", default = "" }, function(options)
+				if options == nil then
+					vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+					return
+				end
+
+				local cmd_parts = { "jj", "squash", "-r", change_id }
+				local success_msg = "Squashed change " .. change_id .. " with custom options"
+				if options ~= "" then
+					-- Split options into parts (simple space split, might need improvement for quoted strings)
+					local option_parts = vim.split(options, "%s+")
+					for _, part in ipairs(option_parts) do
+						table.insert(cmd_parts, part)
+					end
+				end
+
+				vim.ui.select({
+					"Non-interactively",
+					"Interactively",
+					"Cancel"
+				}, { prompt = "Select mode for squashing:" }, function(mode)
+					if mode == "Cancel" or not mode then
+						vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+						return
+					end
+
+					if mode == "Interactively" then
+						table.insert(cmd_parts, "-i")
+						success_msg = success_msg .. " interactively"
+					end
+					execute_jj_command(cmd_parts, success_msg, true)
+				end)
+			end)
 		end
-		execute_jj_command(cmd_parts, success_msg, true)
 	end)
 end
 
