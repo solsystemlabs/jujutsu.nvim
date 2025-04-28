@@ -632,6 +632,33 @@ function Commands.squash_change()
 	end)
 end
 
+function Commands.squash_change()
+	local change_id = Utils.extract_change_id(vim.api.nvim_get_current_line())
+	if not change_id then
+		vim.api.nvim_echo({ { "No change ID found on this line to squash.", "WarningMsg" } }, false, {})
+		return
+	end
+
+	vim.ui.select({
+		"Squash non-interactively",
+		"Squash interactively",
+		"Cancel"
+	}, { prompt = "Select squash mode for " .. change_id .. ":" }, function(choice)
+		if choice == "Cancel" or not choice then
+			vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+			return
+		end
+
+		local cmd_parts = { "jj", "squash", "-r", change_id }
+		local success_msg = "Squashed change " .. change_id
+		if choice == "Squash interactively" then
+			table.insert(cmd_parts, "-i")
+			success_msg = success_msg .. " interactively"
+		end
+		execute_jj_command(cmd_parts, success_msg, true)
+	end)
+end
+
 function Commands.rebase_onto_master()
 	execute_jj_command({ "jj", "rebase", "-b", "@", "-d", "master" }, "Rebased current branch onto master", true)
 end

@@ -74,6 +74,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[S]plit Change" }, opts))
 	vim.keymap.set('n', '<leader>jrm', function() Commands.rebase_onto_master() end,
 		vim.tbl_extend('keep', { desc = "[R]ebase onto [M]aster" }, opts))
+	vim.keymap.set('n', '<leader>jsq', function() Commands.squash_change() end,
+		vim.tbl_extend('keep', { desc = "[S]quash Change" }, opts))
 	vim.keymap.set('n', '<leader>jol', function() Log.toggle_operation_log() end,
 		vim.tbl_extend('keep', { desc = "[O]peration [L]og Toggle" }, opts))
 end
@@ -104,6 +106,7 @@ M.move_bookmark = Commands.move_bookmark
 M.git_push = Commands.git_push
 M.rebase_change = Commands.rebase_change
 M.split_change = Commands.split_change
+M.squash_change = Commands.squash_change
 M.rebase_onto_master = Commands.rebase_onto_master
 M.show_diff = Commands.show_diff
 M.toggle_operation_log = Log.toggle_operation_log
