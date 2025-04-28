@@ -85,6 +85,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[S]quash [W]orkflow" }, opts))
 	vim.keymap.set('n', '<leader>jol', function() Log.toggle_operation_log() end,
 		vim.tbl_extend('keep', { desc = "[O]peration [L]og Toggle" }, opts))
+	vim.keymap.set('n', '<leader>jam', function() Commands.abandon_multiple_changes() end,
+		vim.tbl_extend('keep', { desc = "[A]bandon [M]ultiple Changes" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -118,6 +120,7 @@ M.squash_workflow = Commands.squash_workflow
 M.rebase_onto_master = Commands.rebase_onto_master
 M.show_diff = Commands.show_diff
 M.toggle_operation_log = Log.toggle_operation_log
+M.abandon_multiple_changes = Commands.abandon_multiple_changes
 
 
 -- Return the main module table M

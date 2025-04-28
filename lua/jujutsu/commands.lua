@@ -619,6 +619,94 @@ function Commands.abandon_change()
 	end)
 end
 
+function Commands.abandon_multiple_changes()
+	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
+		vim.api.nvim_echo({ { "Log window must be open to select multiple changes", "WarningMsg" } }, false, {})
+		return
+	end
+
+	local log_buf = vim.api.nvim_win_get_buf(M_ref.log_win)
+	local lines = vim.api.nvim_buf_get_lines(log_buf, 0, -1, false)
+	local options = {}
+	local change_ids = {}
+	
+	for _, line in ipairs(lines) do
+		local change_id = Utils.extract_change_id(line)
+		if change_id then
+			local desc = line:match(".*@.-%.%w+%s+(.*)") or "(no description)"
+			table.insert(options, change_id .. " - " .. desc)
+			table.insert(change_ids, change_id)
+		end
+	end
+	
+	if #options == 0 then
+		vim.api.nvim_echo({ { "No changes found in log to abandon", "WarningMsg" } }, false, {})
+		return
+	end
+	
+	local buf = Utils.create_selection_buffer("Select Changes to Abandon", options)
+	local selected = {}
+	for i = 1, #options do selected[i] = false end
+
+	local win, current_win = Utils.open_selection_window(buf, options)
+
+	local function toggle_selection()
+		local line_nr = vim.api.nvim_win_get_cursor(win)[1]
+		if line_nr <= 5 then return end
+		local option_idx = line_nr - 5
+		if option_idx > #options then return end
+		selected[option_idx] = not selected[option_idx]
+		local marker = selected[option_idx] and "x" or " "
+		local new_line = "[" .. marker .. "] " .. options[option_idx]
+		vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
+	end
+
+	local function confirm_selection()
+		local result = {}
+		for i, is_selected in ipairs(selected) do
+			if is_selected then table.insert(result, change_ids[i]) end
+		end
+		vim.api.nvim_win_close(win, true)
+		if vim.api.nvim_win_is_valid(current_win) then
+			vim.api.nvim_set_current_win(current_win)
+		end
+		if #result == 0 then
+			vim.api.nvim_echo({ { "No changes selected to abandon", "WarningMsg" } }, false, {})
+			return
+		end
+		vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon " .. #result .. " changes?" }, function(choice)
+			if choice == "Yes" then
+				local cmd_parts = { "jj", "abandon" }
+				for _, change_id in ipairs(result) do
+					table.insert(cmd_parts, change_id)
+				end
+				execute_jj_command(cmd_parts, "Abandoned " .. #result .. " changes", true)
+			else
+				vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
+			end
+		end)
+	end
+
+	local function cancel_selection()
+		vim.api.nvim_win_close(win, true)
+		if vim.api.nvim_win_is_valid(current_win) then
+			vim.api.nvim_set_current_win(current_win)
+		end
+	end
+
+	local opts = { noremap = true, silent = true, buffer = buf }
+	vim.keymap.set('n', '<Space>', toggle_selection, opts)
+	vim.keymap.set('n', '<CR>', confirm_selection, opts)
+	vim.keymap.set('n', 'q', cancel_selection, opts)
+	vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+
+	vim.api.nvim_win_set_option(win, 'cursorline', true)
+	vim.api.nvim_set_current_buf(buf)
+	vim.cmd('syntax match Comment /^#.*/')
+	vim.cmd('syntax match Selected /\\[x\\]/')
+	vim.cmd('highlight link Selected String')
+end
+
 function Commands.describe_change()
 	local change_id = Utils.extract_change_id(vim.api.nvim_get_current_line())
 	if not change_id then

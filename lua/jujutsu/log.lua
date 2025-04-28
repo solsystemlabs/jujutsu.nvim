@@ -42,6 +42,7 @@ local log_keymaps_info = {
 	{ key = "sw", desc = "[S]quash [W]orkflow" },
 	{ key = "df", desc = "Show [D]iff of current change" },
 	{ key = "ol", desc = "Toggle [O]peration [L]og" },
+	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
 }
 
 local revset_templates = {
@@ -151,6 +152,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 	map('ol', ':lua require("jujutsu").toggle_operation_log()<CR>', "Toggle [O]peration [L]og")
+	map('am', ':lua require("jujutsu").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
