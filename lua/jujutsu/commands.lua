@@ -377,13 +377,16 @@ function Commands.rebase_change()
 		             scope_choice == "Rebase whole branch" and "-b" or "-s"
 
 		local function execute_rebase_command(dest_id, position_flag)
-			local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
+			local cmd_parts = { "jj", "rebase", flag, source_id }
 			if position_flag == "--insert-before" then
-				-- For insert-before, we need to use it as a separate argument
 				table.insert(cmd_parts, "--before")
+				table.insert(cmd_parts, dest_id)
 			elseif position_flag == "--insert-after" then
-				-- For insert-after, we need to use it as a separate argument
 				table.insert(cmd_parts, "--after")
+				table.insert(cmd_parts, dest_id)
+			else
+				table.insert(cmd_parts, "-d")
+				table.insert(cmd_parts, dest_id)
 			end
 			local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
 			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. position_text .. " " .. dest_id, true)
