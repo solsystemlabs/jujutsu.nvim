@@ -37,20 +37,67 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		return false
 	end
 	local command_str = table.concat(command_parts, " ")
-	vim.fn.system(command_parts)
-	if vim.v.shell_error ~= 0 then
-		local err_output = vim.fn.system(command_str .. " 2>&1")
-		local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
-		local error_text = format_error_output(err_output, vim.v.shell_error)
-		table.insert(msg_chunks, { error_text, "ErrorMsg" })
-		vim.api.nvim_echo(msg_chunks, true, {})
-		return false
+	vim.notify("Running: " .. command_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+	
+	-- Use vim.system for non-blocking execution if available
+	local output = ""
+	local error_output = ""
+	local completed = false
+	local success = false
+	
+	local function on_exit(code)
+		completed = true
+		if code == 0 then
+			success = true
+			local message = output ~= "" and output or (success_message or "Command completed successfully.")
+			vim.notify(message, vim.log.levels.INFO, { title = "Jujutsu" })
+			if refresh_log and M_ref and M_ref.refresh_log then
+				M_ref.refresh_log()
+			end
+		else
+			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
+			local error_text = format_error_output(error_output, code)
+			table.insert(msg_chunks, { error_text, "ErrorMsg" })
+			vim.notify(msg_chunks, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+		end
 	end
-	if success_message then vim.api.nvim_echo({ { success_message, "Normal" } }, false, {}) end
-	if refresh_log and M_ref and M_ref.refresh_log then
-		M_ref.refresh_log()
+	
+	local function on_stdout(_, data)
+		if data then
+			output = output .. table.concat(data, "\n")
+		end
 	end
-	return true
+	
+	local function on_stderr(_, data)
+		if data then
+			error_output = error_output .. table.concat(data, "\n")
+		end
+	end
+	
+	-- Use vim.system if available for non-blocking execution
+	if vim.system then
+		vim.system(command_parts, { text = true }, function(obj)
+			output = obj.stdout or ""
+			error_output = obj.stderr or ""
+			on_exit(obj.code)
+		end)
+	else
+		-- Fallback to blocking call if vim.system is not available
+		output = vim.fn.system(command_parts)
+		if vim.v.shell_error ~= 0 then
+			error_output = vim.fn.system(command_str .. " 2>&1")
+			on_exit(vim.v.shell_error)
+		else
+			on_exit(0)
+		end
+	end
+	
+	-- Return based on whether it was synchronous or not
+	if completed then
+		return success
+	else
+		return true -- Assume success for async, errors will be notified
+	end
 end
 
 -- Helper function to get existing bookmark names
@@ -366,17 +413,32 @@ function Commands.git_push()
 	local cmd_str = table.concat(cmd_parts, " ")
 	vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
 
-	local output_lines = vim.fn.systemlist(cmd_str .. " 2>&1")
-	local shell_error_code = vim.v.shell_error
-	local output_string = table.concat(output_lines, "\n"):gsub("[\n\r]+$", "")
-
-	if shell_error_code == 0 then
-		local message = output_string ~= "" and output_string or "jj git push completed successfully (no output)."
-		vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
-		if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+	if vim.system then
+		vim.system(cmd_parts, { text = true }, function(obj)
+			local output = obj.stdout or ""
+			local error_output = obj.stderr or ""
+			if obj.code == 0 then
+				local message = output ~= "" and output or "jj git push completed successfully (no output)."
+				vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
+				if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+			else
+				local error_message = error_output ~= "" and error_output or "(No error output captured, shell error: " .. obj.code .. ")"
+				vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
+			end
+		end)
 	else
-		local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
-		vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
+		local output_lines = vim.fn.systemlist(cmd_str .. " 2>&1")
+		local shell_error_code = vim.v.shell_error
+		local output_string = table.concat(output_lines, "\n"):gsub("[\n\r]+$", "")
+
+		if shell_error_code == 0 then
+			local message = output_string ~= "" and output_string or "jj git push completed successfully (no output)."
+			vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
+			if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+		else
+			local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
+			vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
+		end
 	end
 end
 
@@ -548,7 +610,7 @@ function Commands.split_change()
 	vim.bo[buf].buflisted = false
 
 	local shell = vim.env.SHELL or "/bin/sh"
-	vim.fn.termopen(shell, {
+	local job_id = vim.fn.termopen(shell, {
 		env = {
 			EDITOR = vim.env.EDITOR or "vim",
 			TERM = vim.env.TERM or "xterm-256color",
@@ -575,9 +637,19 @@ function Commands.split_change()
 		end
 	})
 
+	-- Set a timeout to prevent hanging
+	local timeout = 30000 -- 30 seconds
 	vim.defer_fn(function()
-		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id then
-			vim.fn.chansend(vim.b[buf].terminal_job_id, "jj split -i -r " .. change_id .. "\n")
+		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id == job_id then
+			vim.fn.jobstop(job_id)
+			vim.api.nvim_echo({ { "Split operation timed out for change " .. change_id, "ErrorMsg" } }, true, {})
+			if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+		end
+	end, timeout)
+
+	vim.defer_fn(function()
+		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id == job_id then
+			vim.fn.chansend(job_id, "jj split -i -r " .. change_id .. "\n")
 		end
 	end, 100)
 	vim.cmd("startinsert")
