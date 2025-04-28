@@ -627,38 +627,41 @@ function Commands.abandon_multiple_changes()
 
 	local log_buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 	local lines = vim.api.nvim_buf_get_lines(log_buf, 0, -1, false)
-	local options = {}
+	local change_lines = {}
 	local change_ids = {}
+	local line_numbers = {}
 	
-	for _, line in ipairs(lines) do
+	for i, line in ipairs(lines) do
 		local change_id = Utils.extract_change_id(line)
 		if change_id then
-			local desc = line:match(".*@.-%.%w+%s+(.*)") or "(no description)"
-			table.insert(options, change_id .. " - " .. desc)
+			table.insert(change_lines, line)
 			table.insert(change_ids, change_id)
+			table.insert(line_numbers, i)
 		end
 	end
 	
-	if #options == 0 then
+	if #change_ids == 0 then
 		vim.api.nvim_echo({ { "No changes found in log to abandon", "WarningMsg" } }, false, {})
 		return
 	end
 	
-	local buf = Utils.create_selection_buffer("Select Changes to Abandon", options)
+	vim.api.nvim_echo({ { "Use <Space> to select changes, <CR> to confirm, q or <Esc> to cancel", "Normal" } }, false, {})
+	
 	local selected = {}
-	for i = 1, #options do selected[i] = false end
-
-	local win, current_win = Utils.open_selection_window(buf, options)
+	for i = 1, #change_ids do selected[i] = false end
+	local original_lines = vim.deepcopy(lines)
 
 	local function toggle_selection()
-		local line_nr = vim.api.nvim_win_get_cursor(win)[1]
-		if line_nr <= 5 then return end
-		local option_idx = line_nr - 5
-		if option_idx > #options then return end
-		selected[option_idx] = not selected[option_idx]
-		local marker = selected[option_idx] and "x" or " "
-		local new_line = "[" .. marker .. "] " .. options[option_idx]
-		vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { new_line })
+		local line_nr = vim.api.nvim_win_get_cursor(M_ref.log_win)[1]
+		for i, ln in ipairs(line_numbers) do
+			if ln == line_nr then
+				selected[i] = not selected[i]
+				local marker = selected[i] and "[x] " or "[ ] "
+				local new_line = marker .. change_lines[i]
+				vim.api.nvim_buf_set_lines(log_buf, ln - 1, ln, false, { new_line })
+				return
+			end
+		end
 	end
 
 	local function confirm_selection()
@@ -666,10 +669,14 @@ function Commands.abandon_multiple_changes()
 		for i, is_selected in ipairs(selected) do
 			if is_selected then table.insert(result, change_ids[i]) end
 		end
-		vim.api.nvim_win_close(win, true)
-		if vim.api.nvim_win_is_valid(current_win) then
-			vim.api.nvim_set_current_win(current_win)
-		end
+		-- Restore original lines
+		vim.api.nvim_buf_set_lines(log_buf, 0, -1, false, original_lines)
+		-- Clear keymaps
+		vim.keymap.del('n', '<Space>', { buffer = log_buf })
+		vim.keymap.del('n', '<CR>', { buffer = log_buf })
+		vim.keymap.del('n', 'q', { buffer = log_buf })
+		vim.keymap.del('n', '<Esc>', { buffer = log_buf })
+		
 		if #result == 0 then
 			vim.api.nvim_echo({ { "No changes selected to abandon", "WarningMsg" } }, false, {})
 			return
@@ -688,23 +695,24 @@ function Commands.abandon_multiple_changes()
 	end
 
 	local function cancel_selection()
-		vim.api.nvim_win_close(win, true)
-		if vim.api.nvim_win_is_valid(current_win) then
-			vim.api.nvim_set_current_win(current_win)
-		end
+		-- Restore original lines
+		vim.api.nvim_buf_set_lines(log_buf, 0, -1, false, original_lines)
+		-- Clear keymaps
+		vim.keymap.del('n', '<Space>', { buffer = log_buf })
+		vim.keymap.del('n', '<CR>', { buffer = log_buf })
+		vim.keymap.del('n', 'q', { buffer = log_buf })
+		vim.keymap.del('n', '<Esc>', { buffer = log_buf })
+		vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
 	end
 
-	local opts = { noremap = true, silent = true, buffer = buf }
+	local opts = { noremap = true, silent = true, buffer = log_buf }
 	vim.keymap.set('n', '<Space>', toggle_selection, opts)
 	vim.keymap.set('n', '<CR>', confirm_selection, opts)
 	vim.keymap.set('n', 'q', cancel_selection, opts)
 	vim.keymap.set('n', '<Esc>', cancel_selection, opts)
 
-	vim.api.nvim_win_set_option(win, 'cursorline', true)
-	vim.api.nvim_set_current_buf(buf)
-	vim.cmd('syntax match Comment /^#.*/')
-	vim.cmd('syntax match Selected /\\[x\\]/')
-	vim.cmd('highlight link Selected String')
+	vim.api.nvim_win_set_option(M_ref.log_win, 'cursorline', true)
+	vim.api.nvim_set_current_win(M_ref.log_win)
 end
 
 function Commands.describe_change()
