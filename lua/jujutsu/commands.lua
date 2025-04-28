@@ -649,15 +649,7 @@ function Commands.split_change()
 		end
 	})
 
-	-- Set a timeout to prevent hanging
-	local timeout = 30000 -- 30 seconds
-	vim.defer_fn(function()
-		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id == job_id then
-			vim.fn.jobstop(job_id)
-			vim.api.nvim_echo({ { "Split operation timed out for change " .. change_id, "ErrorMsg" } }, true, {})
-			if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-		end
-	end, timeout)
+	-- No timeout for terminal operation to prevent automatic closing
 
 	vim.defer_fn(function()
 		if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].terminal_job_id == job_id then

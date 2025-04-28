@@ -214,8 +214,8 @@ function Log.refresh_log_buffer()
 	end
 	local final_cmd = table.concat(cmd_parts, " ")
 
-	-- Run the terminal command in the buffer with a timeout
-	local job_id = vim.fn.termopen(final_cmd, {
+	-- Run the terminal command in the buffer
+	vim.fn.termopen(final_cmd, {
 		on_exit = function()
 			-- Check if window (win_id) and buffer (new_buf) are still valid
 			if not vim.api.nvim_win_is_valid(win_id) then
@@ -240,19 +240,6 @@ function Log.refresh_log_buffer()
 			setup_log_buffer_keymaps(current_log_buf)
 		end
 	})
-	
-	-- Set a timeout to prevent hanging
-	local timeout = 30000 -- 30 seconds
-	vim.defer_fn(function()
-		if vim.api.nvim_buf_is_valid(new_buf) and vim.b[new_buf].terminal_job_id == job_id then
-			vim.fn.jobstop(job_id)
-			vim.api.nvim_echo({ { "Log refresh operation timed out after 30 seconds", "ErrorMsg" } }, true, {})
-			if vim.api.nvim_win_is_valid(win_id) then vim.api.nvim_win_close(win_id, true) end
-			if M_ref.log_win == win_id then
-				M_ref.log_win = nil; M_ref.log_buf = nil
-			end
-		end
-	end, timeout)
 end
 
 -- Find the next line with a change ID
