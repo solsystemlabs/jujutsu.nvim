@@ -377,9 +377,12 @@ function Commands.rebase_change()
 		local flag = scope_choice == "Rebase single change" and "-r" or
 		             scope_choice == "Rebase whole branch" and "-b" or "-s"
 
-		local function execute_rebase_command(dest_id)
+		local function execute_rebase_command(dest_id, position_flag)
 			local cmd_parts = { "jj", "rebase", flag, source_id, "-d", dest_id }
-			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " onto " .. dest_id, true)
+			if position_flag then
+				table.insert(cmd_parts, position_flag)
+			end
+			execute_jj_command(cmd_parts, "Rebased " .. source_id .. " " .. (position_flag or "onto") .. " " .. dest_id, true)
 		end
 
 		vim.ui.select({
@@ -392,9 +395,27 @@ function Commands.rebase_change()
 				return
 			end
 
+			local function handle_destination_selection(dest_id)
+				vim.ui.select({
+					"Place onto destination",
+					"Insert before destination",
+					"Insert after destination",
+					"Cancel"
+				}, { prompt = "Select rebase position for " .. dest_id .. ":" }, function(position_choice)
+					if position_choice == "Cancel" or not position_choice then
+						vim.api.nvim_echo({ { "Rebase position selection cancelled", "Normal" } }, false, {})
+						return
+					end
+
+					local position_flag = position_choice == "Insert before destination" and "--insert-before" or
+					                      position_choice == "Insert after destination" and "--insert-after" or nil
+					execute_rebase_command(dest_id, position_flag)
+				end)
+			end
+
 			if dest_choice == "Select change from log window" then
 				select_from_log_window(function(dest_id)
-					if dest_id then execute_rebase_command(dest_id) end
+					if dest_id then handle_destination_selection(dest_id) end
 				end, "Select destination change for rebase, then press ")
 			else
 				local bookmark_names = get_bookmark_names() or {}
@@ -403,7 +424,7 @@ function Commands.rebase_change()
 					return
 				end
 				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark)
-					if bookmark then execute_rebase_command(bookmark) end
+					if bookmark then handle_destination_selection(bookmark) end
 				end)
 			end
 		end)
