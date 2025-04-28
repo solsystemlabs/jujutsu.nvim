@@ -52,7 +52,10 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 			local message = output ~= "" and output or (success_message or "Command completed successfully.")
 			vim.notify(message, vim.log.levels.INFO, { title = "Jujutsu" })
 			if refresh_log and M_ref and M_ref.refresh_log then
-				M_ref.refresh_log()
+				-- Defer the refresh to avoid fast event context issues
+				vim.defer_fn(function()
+					M_ref.refresh_log()
+				end, 0)
 			end
 		else
 			local msg_chunks = { { "Error executing: ", "ErrorMsg" }, { (command_str or "<missing command>") .. "\n", "Code" } }
@@ -420,7 +423,12 @@ function Commands.git_push()
 			if obj.code == 0 then
 				local message = output ~= "" and output or "jj git push completed successfully (no output)."
 				vim.notify(message, vim.log.levels.INFO, { title = "jj git push" })
-				if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+				if M_ref and M_ref.refresh_log then
+					-- Defer the refresh to avoid fast event context issues
+					vim.defer_fn(function()
+						M_ref.refresh_log()
+					end, 0)
+				end
 			else
 				local error_message = error_output ~= "" and error_output or "(No error output captured, shell error: " .. obj.code .. ")"
 				vim.notify(error_message, vim.log.levels.ERROR, { title = "jj git push Error" })
@@ -621,7 +629,11 @@ function Commands.split_change()
 			if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
 			if code == 0 then
 				vim.api.nvim_echo({ { "Change " .. change_id .. " split successfully", "Normal" } }, false, {})
-				if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+				if M_ref and M_ref.refresh_log then
+					vim.defer_fn(function()
+						M_ref.refresh_log()
+					end, 0)
+				end
 			else
 				local error_msg = vim.api.nvim_buf_is_valid(buf) and table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") or "Unknown error"
 				vim.api.nvim_echo({ { "Error splitting change " .. change_id .. ": " .. error_msg, "ErrorMsg" } }, true, {})

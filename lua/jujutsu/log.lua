@@ -242,11 +242,11 @@ function Log.refresh_log_buffer()
 	})
 	
 	-- Set a timeout to prevent hanging
-	local timeout = 10000 -- 10 seconds
+	local timeout = 30000 -- 30 seconds
 	vim.defer_fn(function()
 		if vim.api.nvim_buf_is_valid(new_buf) and vim.b[new_buf].terminal_job_id == job_id then
 			vim.fn.jobstop(job_id)
-			vim.api.nvim_echo({ { "Log refresh operation timed out", "ErrorMsg" } }, true, {})
+			vim.api.nvim_echo({ { "Log refresh operation timed out after 30 seconds", "ErrorMsg" } }, true, {})
 			if vim.api.nvim_win_is_valid(win_id) then vim.api.nvim_win_close(win_id, true) end
 			if M_ref.log_win == win_id then
 				M_ref.log_win = nil; M_ref.log_buf = nil
