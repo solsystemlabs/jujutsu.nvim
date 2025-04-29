@@ -314,6 +314,7 @@ function Commands.new_change()
 			"Create change with multiple parents",
 			"Insert before another change",
 			"Insert after another change",
+			"Create based on bookmark",
 			"Cancel"
 		}, { prompt = "Select new change placement option:" }, function(choice)
 			if choice == "Cancel" or not choice then
@@ -352,6 +353,25 @@ function Commands.new_change()
 				select_from_log_window(function(target_id)
 					if target_id then
 						create_insert_change(description, target_id, "--insert-after", "after")
+					end
+				end)
+			elseif choice == "Create based on bookmark" then
+				local bookmark_names, bookmark_map = get_bookmark_names()
+				if not bookmark_names or #bookmark_names == 0 then
+					vim.api.nvim_echo({ { "No bookmarks found to base new change on.", "WarningMsg" } }, false, {})
+					return
+				end
+				vim.ui.select(bookmark_names, { prompt = "Select bookmark to base new change on:" }, function(bookmark_full)
+					if bookmark_full then
+						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+						local cmd_parts = { "jj", "new", bookmark }
+						if description ~= "" then
+							table.insert(cmd_parts, "-m")
+							table.insert(cmd_parts, description)
+						end
+						execute_jj_command(cmd_parts, "Created new change based on bookmark " .. bookmark, true)
+					else
+						vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
 					end
 				end)
 			end
