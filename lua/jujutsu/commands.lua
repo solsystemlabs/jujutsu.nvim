@@ -38,13 +38,13 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	end
 	local command_str = table.concat(command_parts, " ")
 	vim.notify("Running: " .. command_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
-	
+
 	-- Use vim.system for non-blocking execution if available
 	local output = ""
 	local error_output = ""
 	local completed = false
 	local success = false
-	
+
 	local function on_exit(code)
 		completed = true
 		if code == 0 then
@@ -63,19 +63,19 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 			vim.notify(error_message, vim.log.levels.ERROR, { title = "Jujutsu Error" })
 		end
 	end
-	
+
 	local function on_stdout(_, data)
 		if data then
 			output = output .. table.concat(data, "\n")
 		end
 	end
-	
+
 	local function on_stderr(_, data)
 		if data then
 			error_output = error_output .. table.concat(data, "\n")
 		end
 	end
-	
+
 	-- Use vim.system if available for non-blocking execution
 	if vim.system then
 		vim.system(command_parts, { text = true }, function(obj)
@@ -93,7 +93,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 			on_exit(0)
 		end
 	end
-	
+
 	-- Return based on whether it was synchronous or not
 	if completed then
 		return success
@@ -115,23 +115,24 @@ local function get_bookmark_names()
 	for _, line in ipairs(output) do
 		if line:match("^%s*[^%s%(]+%s*:") then
 			-- This line contains a bookmark name (not indented much, before a colon)
-			local full_name = line:sub(1, line:find(":") - 1)
-			local cleaned_name = full_name:match("^%s*([^%s%(]+)") or full_name
+			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
+			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
 			if type(cleaned_name) == "string" then
-				table.insert(names, full_name)
-				bookmark_map[full_name] = cleaned_name
+				table.insert(names, cleaned_name)
+				bookmark_map[cleaned_name] = cleaned_name
 				current_bookmark = cleaned_name
 			else
 				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
 		elseif current_bookmark and line:match("^%s+@") then
 			-- This line contains remote tracking info for the current bookmark (indented)
-			local full_remote = line:match("^%s+([^%(]+)") or line
-			local remote_part = full_remote:match("@[^%s%(]+") or ""
-			local display_name = current_bookmark .. full_remote
-			local constructed_name = current_bookmark .. remote_part
-			table.insert(names, display_name)
-			bookmark_map[display_name] = constructed_name
+			local remote_info = line:match("^%s+([^%(]+)") or ""
+			local remote_part = remote_info:match("@[^%s%(]+") or ""
+			if remote_part ~= "" then
+				local display_name = current_bookmark .. remote_part
+				table.insert(names, display_name)
+				bookmark_map[display_name] = current_bookmark .. remote_part
+			end
 		end
 	end
 	return names, bookmark_map
@@ -209,8 +210,8 @@ local function select_from_log_window(callback, prompt)
 		log_module.toggle_log_window()
 		vim.api.nvim_echo({
 			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter", "Special" },
-			{ " to confirm", "Normal" }
+			{ "Enter",                                                  "Special" },
+			{ " to confirm",                                            "Normal" }
 		}, true, {})
 		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
@@ -220,8 +221,8 @@ local function select_from_log_window(callback, prompt)
 	else
 		vim.api.nvim_echo({
 			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter", "Special" },
-			{ " to confirm", "Normal" }
+			{ "Enter",                                                  "Special" },
+			{ " to confirm",                                            "Normal" }
 		}, true, {})
 		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
 		local current_win = vim.api.nvim_get_current_win()
@@ -357,7 +358,8 @@ function Commands.new_change()
 		end)
 	end
 
-	local prompt_text = change_id and ("Description for new change based on " .. change_id .. ": ") or "Description for new change: "
+	local prompt_text = change_id and ("Description for new change based on " .. change_id .. ": ") or
+			"Description for new change: "
 	vim.ui.input({ prompt = prompt_text, default = "", completion = "file" }, function(input)
 		if input == nil then
 			vim.api.nvim_echo({ { "New change cancelled", "Normal" } }, false, {})
@@ -369,7 +371,8 @@ end
 
 -- Function to rebase changes with support for different flag variations
 function Commands.rebase_change()
-	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and Utils.extract_change_id(vim.api.nvim_get_current_line()) or nil
+	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and
+			Utils.extract_change_id(vim.api.nvim_get_current_line()) or nil
 	if not source_id then
 		source_id = "@"
 		vim.api.nvim_echo({ { "Using current change for rebase.", "Normal" } }, false, {})
@@ -387,7 +390,7 @@ function Commands.rebase_change()
 		end
 
 		local flag = scope_choice == "Rebase single change" and "-r" or
-		             scope_choice == "Rebase whole branch" and "-b" or "-s"
+				scope_choice == "Rebase whole branch" and "-b" or "-s"
 
 		local function execute_rebase_command(dest_id, position_flag)
 			-- Clean the dest_id by removing any additional text after @origin like "(behind by X commits)"
@@ -432,7 +435,7 @@ function Commands.rebase_change()
 					end
 
 					local position_flag = position_choice == "Insert before destination" and "--insert-before" or
-					                      position_choice == "Insert after destination" and "--insert-after" or nil
+							position_choice == "Insert after destination" and "--insert-after" or nil
 					execute_rebase_command(dest_id, position_flag)
 				end)
 			end
@@ -448,7 +451,7 @@ function Commands.rebase_change()
 					return
 				end
 				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark_full)
-					if bookmark_full then 
+					if bookmark_full then
 						local bookmark = bookmark_map[bookmark_full] or bookmark_full
 						handle_destination_selection(bookmark)
 					end
@@ -478,7 +481,8 @@ function Commands.git_push()
 					end, 0)
 				end
 			else
-				local error_message = error_output ~= "" and error_output or "(No error output captured, shell error: " .. obj.code .. ")"
+				local error_message = error_output ~= "" and error_output or
+						"(No error output captured, shell error: " .. obj.code .. ")"
 				vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git push Error" })
 			end
 		end)
@@ -492,7 +496,8 @@ function Commands.git_push()
 			vim.notify(tostring(message), vim.log.levels.INFO, { title = "jj git push" })
 			if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
 		else
-			local error_message = output_string ~= "" and output_string or "(No error output captured, shell error: " .. shell_error_code .. ")"
+			local error_message = output_string ~= "" and output_string or
+					"(No error output captured, shell error: " .. shell_error_code .. ")"
 			vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git push Error" })
 		end
 	end
@@ -537,7 +542,8 @@ function Commands.create_bookmark()
 		elseif name == "" then
 			vim.api.nvim_echo({ { "Bookmark creation cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
 		else
-			execute_jj_command({ "jj", "bookmark", "create", name, "-r", change_id }, "Bookmark '" .. name .. "' created at " .. change_id, true)
+			execute_jj_command({ "jj", "bookmark", "create", name, "-r", change_id },
+				"Bookmark '" .. name .. "' created at " .. change_id, true)
 		end
 	end)
 end
@@ -552,7 +558,8 @@ function Commands.delete_bookmark()
 		if selected_name then
 			vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
 				if choice == "Yes" then
-					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.", true)
+					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
+						true)
 				else
 					vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
 				end
@@ -610,13 +617,14 @@ function Commands.abandon_change()
 		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
 		return
 	end
-	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon change " .. change_id .. "?" }, function(choice)
-		if choice == "Yes" then
-			execute_jj_command({ "jj", "abandon", change_id }, "Abandoned change " .. change_id, true)
-		else
-			vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
-		end
-	end)
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon change " .. change_id .. "?" },
+		function(choice)
+			if choice == "Yes" then
+				execute_jj_command({ "jj", "abandon", change_id }, "Abandoned change " .. change_id, true)
+			else
+				vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
+			end
+		end)
 end
 
 function Commands.abandon_multiple_changes()
@@ -630,7 +638,7 @@ function Commands.abandon_multiple_changes()
 	local change_lines = {}
 	local change_ids = {}
 	local line_numbers = {}
-	
+
 	for i, line in ipairs(lines) do
 		local change_id = Utils.extract_change_id(line)
 		if change_id then
@@ -639,14 +647,14 @@ function Commands.abandon_multiple_changes()
 			table.insert(line_numbers, i)
 		end
 	end
-	
+
 	if #change_ids == 0 then
 		vim.api.nvim_echo({ { "No changes found in log to abandon", "WarningMsg" } }, false, {})
 		return
 	end
-	
+
 	vim.api.nvim_echo({ { "Use <Space> to select changes, <CR> to confirm, q or <Esc> to cancel", "Normal" } }, false, {})
-	
+
 	local selected = {}
 	for i = 1, #change_ids do selected[i] = false end
 	local original_lines = vim.deepcopy(lines)
@@ -688,22 +696,23 @@ function Commands.abandon_multiple_changes()
 		vim.keymap.del('n', '<CR>', { buffer = log_buf })
 		vim.keymap.del('n', 'q', { buffer = log_buf })
 		vim.keymap.del('n', '<Esc>', { buffer = log_buf })
-		
+
 		if #result == 0 then
 			vim.api.nvim_echo({ { "No changes selected to abandon", "WarningMsg" } }, false, {})
 			return
 		end
-		vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon " .. #result .. " changes?" }, function(choice)
-			if choice == "Yes" then
-				local cmd_parts = { "jj", "abandon" }
-				for _, change_id in ipairs(result) do
-					table.insert(cmd_parts, change_id)
+		vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon " .. #result .. " changes?" },
+			function(choice)
+				if choice == "Yes" then
+					local cmd_parts = { "jj", "abandon" }
+					for _, change_id in ipairs(result) do
+						table.insert(cmd_parts, change_id)
+					end
+					execute_jj_command(cmd_parts, "Abandoned " .. #result .. " changes", true)
+				else
+					vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
 				end
-				execute_jj_command(cmd_parts, "Abandoned " .. #result .. " changes", true)
-			else
-				vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
-			end
-		end)
+			end)
 	end
 
 	local function cancel_selection()
@@ -749,13 +758,15 @@ function Commands.describe_change()
 		return
 	end
 	description = description:gsub("^%s*(.-)%s*$", "%1")
-	vim.ui.input({ prompt = "Description for " .. change_id .. ": ", default = description, completion = "file" }, function(input)
-		if input ~= nil then
-			execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id, true)
-		else
-			vim.api.nvim_echo({ { "Description edit cancelled", "Normal" } }, false, {})
-		end
-	end)
+	vim.ui.input({ prompt = "Description for " .. change_id .. ": ", default = description, completion = "file" },
+		function(input)
+			if input ~= nil then
+				execute_jj_command({ "jj", "describe", change_id, "-m", input }, "Updated description for change " .. change_id,
+					true)
+			else
+				vim.api.nvim_echo({ { "Description edit cancelled", "Normal" } }, false, {})
+			end
+		end)
 end
 
 function Commands.split_change()
@@ -774,8 +785,13 @@ function Commands.split_change()
 	local col = math.floor((vim.o.columns - width) / 2)
 
 	local win = vim.api.nvim_open_win(buf, true, {
-		relative = "editor", width = width, height = height,
-		row = row, col = col, style = "minimal", border = "rounded"
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded"
 	})
 
 	vim.bo[buf].buftype = "nofile"
@@ -801,7 +817,8 @@ function Commands.split_change()
 					end, 0)
 				end
 			else
-				local error_msg = vim.api.nvim_buf_is_valid(buf) and table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") or "Unknown error"
+				local error_msg = vim.api.nvim_buf_is_valid(buf) and
+						table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") or "Unknown error"
 				vim.api.nvim_echo({ { "Error splitting change " .. change_id .. ": " .. error_msg, "ErrorMsg" } }, true, {})
 			end
 		end,
@@ -992,8 +1009,13 @@ function Commands.show_diff()
 	local col = math.floor((vim.o.columns - width) / 2)
 
 	local win = vim.api.nvim_open_win(buf, true, {
-		relative = "editor", width = width, height = height,
-		row = row, col = col, style = "minimal", border = "rounded"
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded"
 	})
 
 	vim.fn.termopen({ "jj", "diff", "-r", change_id }, {
