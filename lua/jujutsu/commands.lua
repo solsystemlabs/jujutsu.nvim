@@ -693,11 +693,14 @@ function Commands.abandon_multiple_changes()
 		-- Restore read-only status
 		vim.bo[log_buf].modifiable = false
 		vim.bo[log_buf].readonly = true
-		-- Clear keymaps
+		-- Clear temporary keymaps
 		vim.keymap.del('n', '<Space>', { buffer = log_buf })
 		vim.keymap.del('n', '<CR>', { buffer = log_buf })
 		vim.keymap.del('n', 'q', { buffer = log_buf })
 		vim.keymap.del('n', '<Esc>', { buffer = log_buf })
+		-- Restore original keymaps
+		local log_module = require("jujutsu.log")
+		log_module.refresh_log_buffer()
 
 		if #result == 0 then
 			vim.api.nvim_echo({ { "No changes selected to abandon", "WarningMsg" } }, false, {})
@@ -726,11 +729,14 @@ function Commands.abandon_multiple_changes()
 		-- Restore read-only status
 		vim.bo[log_buf].modifiable = false
 		vim.bo[log_buf].readonly = true
-		-- Clear keymaps
+		-- Clear temporary keymaps
 		vim.keymap.del('n', '<Space>', { buffer = log_buf })
 		vim.keymap.del('n', '<CR>', { buffer = log_buf })
 		vim.keymap.del('n', 'q', { buffer = log_buf })
 		vim.keymap.del('n', '<Esc>', { buffer = log_buf })
+		-- Restore original keymaps
+		local log_module = require("jujutsu.log")
+		log_module.refresh_log_buffer()
 		vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
 	end
 
