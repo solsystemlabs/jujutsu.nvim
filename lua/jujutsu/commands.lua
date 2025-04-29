@@ -664,8 +664,10 @@ function Commands.abandon_multiple_changes()
 		for i, ln in ipairs(line_numbers) do
 			if ln == line_nr then
 				selected[i] = not selected[i]
-				local marker = selected[i] and "● " or "○ "
-				local new_line = marker .. change_lines[i]
+				local marker = selected[i] and "●" or "○"
+				-- Replace the first character(s) of the line with the new marker
+				local current_line = change_lines[i]
+				local new_line = marker .. current_line:sub(current_line:find("%s") or 2)
 				-- Temporarily make buffer modifiable
 				vim.bo[log_buf].modifiable = true
 				vim.bo[log_buf].readonly = false
