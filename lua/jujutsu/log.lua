@@ -188,8 +188,6 @@ function Log.refresh_log_buffer()
 	vim.bo[new_buf].buftype = "nofile" -- Not related to a file on disk
 	vim.bo[new_buf].bufhidden = "hide" -- Unload buffer when hidden (avoids multiple listed buffers)
 	vim.bo[new_buf].swapfile = false  -- No swap file needed
-	-- Set filetype for potential syntax highlighting if desired (optional)
-	-- vim.bo[new_buf].filetype = "git" -- or a custom 'jjlog' filetype
 
 	-- Set this newly named buffer into the target window
 	vim.api.nvim_win_set_buf(win_id, new_buf)
@@ -244,6 +242,13 @@ function Log.refresh_log_buffer()
 			setup_log_buffer_keymaps(current_log_buf)
 			-- Apply syntax highlighting
 			vim.cmd("AnsiEsc")
+			-- Remove any extra blank or duplicated lines at the top
+			local lines = vim.api.nvim_buf_get_lines(current_log_buf, 0, 2, false)
+			if #lines > 1 and (lines[1] == "" or lines[1] == lines[2]) then
+				vim.bo[current_log_buf].modifiable = true
+				vim.api.nvim_buf_set_lines(current_log_buf, 0, 1, false, {})
+				vim.bo[current_log_buf].modifiable = false
+			end
 		end
 	})
 end
