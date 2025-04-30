@@ -236,19 +236,17 @@ function Log.refresh_log_buffer()
 
 			-- Terminal finished, set buffer to read-only etc.
 			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>', true, true, true), 'n', true)
+			-- Remove any extra blank or duplicated lines at the top before setting to readonly
+			local lines = vim.api.nvim_buf_get_lines(current_log_buf, 0, 2, false)
+			if #lines > 1 and (lines[1] == "" or lines[1] == lines[2]) then
+				vim.api.nvim_buf_set_lines(current_log_buf, 0, 1, false, {})
+			end
+			-- Apply syntax highlighting
+			vim.cmd("AnsiEsc")
 			-- Options need to be set on the specific buffer 'current_log_buf'
 			vim.bo[current_log_buf].modifiable = false
 			vim.bo[current_log_buf].readonly = true
 			setup_log_buffer_keymaps(current_log_buf)
-			-- Apply syntax highlighting
-			vim.cmd("AnsiEsc")
-			-- Remove any extra blank or duplicated lines at the top
-			local lines = vim.api.nvim_buf_get_lines(current_log_buf, 0, 2, false)
-			if #lines > 1 and (lines[1] == "" or lines[1] == lines[2]) then
-				vim.bo[current_log_buf].modifiable = true
-				vim.api.nvim_buf_set_lines(current_log_buf, 0, 1, false, {})
-				vim.bo[current_log_buf].modifiable = false
-			end
 		end
 	})
 end
