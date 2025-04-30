@@ -523,6 +523,48 @@ function Commands.git_push()
 	end
 end
 
+-- Function to run jj git fetch and display output via vim.notify
+function Commands.git_fetch()
+	local cmd_parts = { "jj", "git", "fetch" }
+	local cmd_str = table.concat(cmd_parts, " ")
+	vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+	if vim.system then
+		vim.system(cmd_parts, { text = true }, function(obj)
+			local output = obj.stdout or ""
+			local error_output = obj.stderr or ""
+			if obj.code == 0 then
+				local message = output ~= "" and output or "jj git fetch completed successfully (no output)."
+				vim.notify(tostring(message), vim.log.levels.INFO, { title = "jj git fetch" })
+				if M_ref and M_ref.refresh_log then
+					-- Defer the refresh to avoid fast event context issues
+					vim.defer_fn(function()
+						M_ref.refresh_log()
+					end, 0)
+				end
+			else
+				local error_message = error_output ~= "" and error_output or
+						"(No error output captured, shell error: " .. obj.code .. ")"
+				vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git fetch Error" })
+			end
+		end)
+	else
+		local output_lines = vim.fn.systemlist(cmd_str .. " 2>&1")
+		local shell_error_code = vim.v.shell_error
+		local output_string = table.concat(output_lines, "\n"):gsub("[\n\r]+$", "")
+
+		if shell_error_code == 0 then
+			local message = output_string ~= "" and output_string or "jj git fetch completed successfully (no output)."
+			vim.notify(tostring(message), vim.log.levels.INFO, { title = "jj git fetch" })
+			if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
+		else
+			local error_message = output_string ~= "" and output_string or
+					"(No error output captured, shell error: " .. shell_error_code .. ")"
+			vim.notify(tostring(error_message), vim.log.levels.ERROR, { title = "jj git fetch Error" })
+		end
+	end
+end
+
 -- Bookmark management functions
 local function move_bookmark_to_change(name, change_id)
 	local cmd_parts = { "jj", "bookmark", "set", name, "-r", change_id }
