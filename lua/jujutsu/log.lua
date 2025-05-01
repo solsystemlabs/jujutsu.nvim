@@ -42,7 +42,7 @@ local log_keymaps_info = {
 	{ key = "sw", desc = "[S]quash [W]orkflow" },
 	{ key = "df", desc = "Show [D]iff of current change" },
 	{ key = "f",  desc = "Git [F]etch latest changes" },
-	{ key = "ol", desc = "Toggle [O]peration [L]og" },
+	{ key = "ol", desc = "[O]perations [L]og" },
 	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
 }
 
@@ -153,7 +153,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 	map('f', ':lua require("jujutsu").git_fetch()<CR>', "Git [F]etch latest changes")
-	map('ol', ':lua require("jujutsu").toggle_operation_log()<CR>', "Toggle [O]peration [L]og")
+	map('ol', ':lua require("jujutsu").show_operations_log()<CR>', "[O]perations [L]og")
 	map('am', ':lua require("jujutsu").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
 end
 
@@ -659,19 +659,9 @@ function Log.init(main_module_ref)
 	M_ref = main_module_ref
 end
 
--- Function to toggle between regular log and operation log
-function Log.toggle_operation_log()
-	M_ref.is_operation_log = not M_ref.is_operation_log
-	vim.api.nvim_echo({ { "Switched to " .. (M_ref.is_operation_log and "Operation Log" or "Regular Log"), "Normal" } }, false, {})
-	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-		Log.refresh_log_buffer()
-	end
-end
-
 -- *** ADDED: Expose the new help functions ***
 Log.toggle_help_window = Log.toggle_help_window
 Log.close_help_window = Log.close_help_window
-Log.toggle_operation_log = Log.toggle_operation_log
 
 
 return Log

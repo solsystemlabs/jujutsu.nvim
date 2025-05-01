@@ -7,6 +7,7 @@ local M = {}
 local Log = require("jujutsu.log")
 local Status = require("jujutsu.status")
 local Commands = require("jujutsu.commands")
+local OperationsLog = require("jujutsu.operations_log")
 -- Utils is used internally by other modules
 
 -- State variables with type annotations
@@ -18,11 +19,18 @@ M.log_win = nil
 M.status_buf = nil
 ---@type number|nil
 M.status_win = nil
+---@type number|nil
+M.operations_log_buf = nil
+---@type number|nil
+M.operations_log_win = nil
 M.log_settings = { limit = "", revset = "", template = "", search_pattern = "" }
 M.is_operation_log = false
 
--- Initialize submodules... (unchanged)
-Log.init(M); Status.init(M); Commands.init(M)
+-- Initialize submodules
+Log.init(M)
+Status.init(M)
+Commands.init(M)
+OperationsLog.init(M)
 
 -- Delegate log refresh calls... (unchanged)
 function M.refresh_log()
@@ -89,6 +97,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[O]peration [L]og Toggle" }, opts))
 	vim.keymap.set('n', '<leader>jam', function() Commands.abandon_multiple_changes() end,
 		vim.tbl_extend('keep', { desc = "[A]bandon [M]ultiple Changes" }, opts))
+	vim.keymap.set('n', '<leader>jol', function() OperationsLog.show_operations_log() end,
+		vim.tbl_extend('keep', { desc = "[O]perations [L]og" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
@@ -124,6 +134,9 @@ M.show_diff = Commands.show_diff
 M.git_fetch = Commands.git_fetch
 M.toggle_operation_log = Log.toggle_operation_log
 M.abandon_multiple_changes = Commands.abandon_multiple_changes
+M.show_operations_log = OperationsLog.show_operations_log
+M.close_operations_log_window = OperationsLog.close_operations_log_window
+M.refresh_operations_log = OperationsLog.refresh_operations_log
 
 
 -- Return the main module table M
