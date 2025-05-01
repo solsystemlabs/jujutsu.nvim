@@ -117,6 +117,8 @@ M.abandon_multiple_changes = Commands.abandon_multiple_changes
 M.show_operations_log = OperationsLog.show_operations_log
 M.close_operations_log_window = OperationsLog.close_operations_log_window
 M.refresh_operations_log = OperationsLog.refresh_operations_log
+M.jump_next_node = OperationsLog.jump_next_node
+M.jump_prev_node = OperationsLog.jump_prev_node
 
 
 -- Return the main module table M

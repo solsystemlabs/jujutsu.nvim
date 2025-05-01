@@ -15,8 +15,80 @@ local function setup_operations_log_buffer_keymaps(buf)
     vim.api.nvim_buf_set_keymap(buf, 'n', key, cmd, vim.tbl_extend("force", opts, { desc = desc }))
   end
 
+  -- Close window mappings
   map('q', '<Cmd>lua require("jujutsu").close_operations_log_window()<CR>', 'Close operations log window')
   map('<Esc>', '<Cmd>lua require("jujutsu").close_operations_log_window()<CR>', 'Close operations log window with Esc')
+  
+  -- Navigation between nodes (lines starting with ○)
+  map('j', '<Cmd>lua require("jujutsu.operations_log").jump_next_node()<CR>', 'Jump to next node')
+  map('k', '<Cmd>lua require("jujutsu.operations_log").jump_prev_node()<CR>', 'Jump to previous node')
+  
+  -- Disable other common Vim motions
+  local disabled_keys = {'h', 'l', 'w', 'b', 'e', '0', '$', 'G', 'gg', '^', '%', '{', '}', '(', ')', '[', ']', '<Up>', '<Down>', '<Left>', '<Right>'}
+  for _, key in ipairs(disabled_keys) do
+    map(key, '<Nop>', 'Disabled motion')
+  end
+end
+
+-- Function to find the next or previous node (line starting with ○)
+function OperationsLog.jump_next_node()
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  if not cursor_pos then return end
+  local current_line = cursor_pos[1]
+  local line_count = vim.api.nvim_buf_line_count(0)
+  local found_line = nil
+
+  for i = current_line + 1, line_count do
+    local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+    if lines and #lines > 0 and lines[1]:match("^○") then
+      found_line = i
+      break
+    end
+  end
+  
+  if not found_line then
+    for i = 1, current_line - 1 do
+      local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+      if lines and #lines > 0 and lines[1]:match("^○") then
+        found_line = i
+        break
+      end
+    end
+  end
+
+  if found_line then
+    vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+  end
+end
+
+function OperationsLog.jump_prev_node()
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  if not cursor_pos then return end
+  local current_line = cursor_pos[1]
+  local line_count = vim.api.nvim_buf_line_count(0)
+  local found_line = nil
+
+  for i = current_line - 1, 1, -1 do
+    local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+    if lines and #lines > 0 and lines[1]:match("^○") then
+      found_line = i
+      break
+    end
+  end
+  
+  if not found_line then
+    for i = line_count, current_line + 1, -1 do
+      local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
+      if lines and #lines > 0 and lines[1]:match("^○") then
+        found_line = i
+        break
+      end
+    end
+  end
+
+  if found_line then
+    vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+  end
 end
 
 function OperationsLog.show_operations_log()
