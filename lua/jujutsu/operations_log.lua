@@ -16,6 +16,7 @@ local function setup_operations_log_buffer_keymaps(buf)
   end
 
   map('q', '<Cmd>lua require("jujutsu").close_operations_log_window()<CR>', 'Close operations log window')
+  map('<Esc>', '<Cmd>lua require("jujutsu").close_operations_log_window()<CR>', 'Close operations log window with Esc')
 end
 
 function OperationsLog.show_operations_log()
