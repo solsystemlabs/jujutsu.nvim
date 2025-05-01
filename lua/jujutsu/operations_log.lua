@@ -24,30 +24,31 @@ function OperationsLog.show_operations_log()
     return
   end
 
-  local width = math.floor(vim.o.columns * 0.8)
-  local height = math.floor(vim.o.lines * 0.8)
-  local col = math.floor((vim.o.columns - width) / 2)
-  local row = math.floor((vim.o.lines - height) / 2)
+  -- Create a new vertical split window
+  vim.cmd("botright vsplit")
+  M_ref.operations_log_win = vim.api.nvim_get_current_win()
+
+  -- Check if window creation failed
+  if not M_ref.operations_log_win or not vim.api.nvim_win_is_valid(M_ref.operations_log_win) then
+    vim.api.nvim_echo({ { "Failed to create split window for operations log.", "ErrorMsg" } }, true, {})
+    M_ref.operations_log_win = nil
+    return
+  end
+
+  -- Set window options (like size)
+  vim.cmd("vertical resize 80")
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(buf, "JJ Operations Log")
 
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = 'editor',
-    width = width,
-    height = height,
-    col = col,
-    row = row,
-    style = 'minimal',
-    border = 'rounded',
-  })
-
-  M_ref.operations_log_win = win
   M_ref.operations_log_buf = buf
 
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "hide"
   vim.bo[buf].swapfile = false
+
+  -- Set this buffer into the window
+  vim.api.nvim_win_set_buf(M_ref.operations_log_win, buf)
 
   setup_operations_log_buffer_keymaps(buf)
 
