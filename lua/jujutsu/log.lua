@@ -42,7 +42,6 @@ local log_keymaps_info = {
 	{ key = "sw", desc = "[S]quash [W]orkflow" },
 	{ key = "df", desc = "Show [D]iff of current change" },
 	{ key = "f",  desc = "Git [F]etch latest changes" },
-	{ key = "ol", desc = "[O]perations [L]og" },
 	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
 }
 
@@ -153,7 +152,6 @@ local function setup_log_buffer_keymaps(buf)
 	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 	map('f', ':lua require("jujutsu").git_fetch()<CR>', "Git [F]etch latest changes")
-	map('ol', ':lua require("jujutsu").show_operations_log()<CR>', "[O]perations [L]og")
 	map('am', ':lua require("jujutsu").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
 end
 
