@@ -57,24 +57,6 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[S]tatus Show" }, opts))
 	vim.keymap.set('n', '<leader>jr', function() Log.reset_log_settings() end,
 		vim.tbl_extend('keep', { desc = "Log [R]eset Settings" }, opts))
-	vim.keymap.set('n', '<leader>jo', function()
-		vim.ui.select({ "Set Limit", "Set Revset Filter", "Search in Log", "Change Template", "Reset Settings" },
-			{ prompt = "Select a Jujutsu log option:", },
-			function(choice)
-				if not choice then return end -- Handle cancel
-				if choice == "Set Limit" then
-					Log.set_log_limit()
-				elseif choice == "Set Revset Filter" then
-					Log.set_revset_filter()
-				elseif choice == "Search in Log" then
-					Log.search_in_log()
-				elseif choice == "Change Template" then
-					Log.change_log_template()
-				elseif choice == "Reset Settings" then
-					Log.reset_log_settings()
-				end
-			end)
-	end, vim.tbl_extend('keep', { desc = "Log [O]ptions" }, opts))
 	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end,
 		vim.tbl_extend('keep', { desc = "[C]ommit Change" }, opts))
 	vim.keymap.set('n', '<leader>jn', function() Commands.new_change() end,
@@ -95,8 +77,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "Git [F]etch" }, opts))
 	vim.keymap.set('n', '<leader>jam', function() Commands.abandon_multiple_changes() end,
 		vim.tbl_extend('keep', { desc = "[A]bandon [M]ultiple Changes" }, opts))
-	vim.keymap.set('n', '<leader>jol', function() OperationsLog.show_operations_log() end,
-		vim.tbl_extend('keep', { desc = "[O]perations [L]og" }, opts))
+	vim.keymap.set('n', '<leader>jo', function() OperationsLog.show_operations_log() end,
+		vim.tbl_extend('keep', { desc = "[O]perations Log" }, opts))
 end
 
 -- Expose public API functions needed by internal keymaps (require('jujutsu')...)
