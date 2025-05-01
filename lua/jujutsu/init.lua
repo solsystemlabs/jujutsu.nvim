@@ -93,8 +93,6 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[S]quash [W]orkflow" }, opts))
 	vim.keymap.set('n', '<leader>jf', function() Commands.git_fetch() end,
 		vim.tbl_extend('keep', { desc = "Git [F]etch" }, opts))
-	vim.keymap.set('n', '<leader>jol', function() Log.toggle_operation_log() end,
-		vim.tbl_extend('keep', { desc = "[O]peration [L]og Toggle" }, opts))
 	vim.keymap.set('n', '<leader>jam', function() Commands.abandon_multiple_changes() end,
 		vim.tbl_extend('keep', { desc = "[A]bandon [M]ultiple Changes" }, opts))
 	vim.keymap.set('n', '<leader>jol', function() OperationsLog.show_operations_log() end,
