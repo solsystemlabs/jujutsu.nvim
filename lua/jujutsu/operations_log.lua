@@ -30,7 +30,7 @@ local function setup_operations_log_buffer_keymaps(buf)
   end
 end
 
--- Function to find the next or previous node (line starting with ○)
+-- Function to find the next or previous node (line starting with ○ or @)
 function OperationsLog.jump_next_node()
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
   if not cursor_pos then return end
@@ -40,7 +40,7 @@ function OperationsLog.jump_next_node()
 
   for i = current_line + 1, line_count do
     local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
-    if lines and #lines > 0 and lines[1]:match("^○") then
+    if lines and #lines > 0 and (lines[1]:match("^○") or lines[1]:match("^@")) then
       found_line = i
       break
     end
@@ -61,7 +61,7 @@ function OperationsLog.jump_prev_node()
 
   for i = current_line - 1, 1, -1 do
     local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
-    if lines and #lines > 0 and lines[1]:match("^○") then
+    if lines and #lines > 0 and (lines[1]:match("^○") or lines[1]:match("^@")) then
       found_line = i
       break
     end
