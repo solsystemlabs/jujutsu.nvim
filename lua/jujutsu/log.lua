@@ -129,6 +129,7 @@ local function setup_log_buffer_keymaps(buf)
 	-- Apply mappings
 	map('?', ':lua require("jujutsu.log").toggle_help_window()<CR>', "Toggle keymap help")
 	map('q', ':lua require("jujutsu").toggle_log_window()<CR>', "Close log window")
+	map('<Esc>', ':lua require("jujutsu").toggle_log_window()<CR>', "Close log window with Esc")
 	map('j', ':lua require("jujutsu").jump_next_change()<CR>', "Jump to next change")
 	map('k', ':lua require("jujutsu").jump_prev_change()<CR>', "Jump to previous change")
 	map('e', ':lua require("jujutsu").edit_change()<CR>', "Edit current change")
