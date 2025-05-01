@@ -45,19 +45,11 @@ function OperationsLog.jump_next_node()
       break
     end
   end
-  
-  if not found_line then
-    for i = 1, current_line - 1 do
-      local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
-      if lines and #lines > 0 and lines[1]:match("^○") then
-        found_line = i
-        break
-      end
-    end
-  end
 
   if found_line then
     vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+  else
+    vim.api.nvim_echo({ { "No more nodes below", "WarningMsg" } }, false, {})
   end
 end
 
@@ -65,7 +57,6 @@ function OperationsLog.jump_prev_node()
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
   if not cursor_pos then return end
   local current_line = cursor_pos[1]
-  local line_count = vim.api.nvim_buf_line_count(0)
   local found_line = nil
 
   for i = current_line - 1, 1, -1 do
@@ -75,19 +66,11 @@ function OperationsLog.jump_prev_node()
       break
     end
   end
-  
-  if not found_line then
-    for i = line_count, current_line + 1, -1 do
-      local lines = vim.api.nvim_buf_get_lines(0, i - 1, i, false)
-      if lines and #lines > 0 and lines[1]:match("^○") then
-        found_line = i
-        break
-      end
-    end
-  end
 
   if found_line then
     vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+  else
+    vim.api.nvim_echo({ { "No more nodes above", "WarningMsg" } }, false, {})
   end
 end
 
