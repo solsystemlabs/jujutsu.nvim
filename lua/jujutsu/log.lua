@@ -25,6 +25,7 @@ local log_keymaps_info = {
 	{ key = "d",  desc = "Edit change description (jj describe)" },
 	{ key = "n",  desc = "Create new change (jj new)" },
 	{ key = "a",  desc = "Abandon change (jj abandon)" },
+	{ key = "ad", desc = "[A]bandon change and [D]escendants" },
 	{ key = "c",  desc = "Commit current change (jj commit)" },
 	{ key = "st", desc = "Show status window (jj st)" },
 	{ key = "l",  desc = "Set log entry limit (-n)" },
@@ -154,6 +155,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
 	map('f', ':lua require("jujutsu").git_fetch()<CR>', "Git [F]etch latest changes")
 	map('am', ':lua require("jujutsu").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
+	map('ad', ':lua require("jujutsu").abandon_change_and_descendants()<CR>', "[A]bandon change and [D]escendants")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
