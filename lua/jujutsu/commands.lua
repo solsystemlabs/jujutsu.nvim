@@ -689,6 +689,22 @@ function Commands.abandon_change()
 		end)
 end
 
+function Commands.abandon_change_and_descendants()
+	local change_id = Utils.extract_change_id(vim.api.nvim_get_current_line())
+	if not change_id then
+		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
+		return
+	end
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon change " .. change_id .. " and all its descendants?" },
+		function(choice)
+			if choice == "Yes" then
+				execute_jj_command({ "jj", "abandon", change_id .. ".." }, "Abandoned change " .. change_id .. " and descendants", true)
+			else
+				vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
+			end
+		end)
+end
+
 function Commands.abandon_multiple_changes()
 	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
 		vim.api.nvim_echo({ { "Log window must be open to select multiple changes", "WarningMsg" } }, false, {})
