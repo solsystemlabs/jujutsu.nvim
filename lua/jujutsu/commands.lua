@@ -698,7 +698,7 @@ function Commands.abandon_change_and_descendants()
 	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon change " .. change_id .. " and all its descendants?" },
 		function(choice)
 			if choice == "Yes" then
-				execute_jj_command({ "jj", "abandon", change_id .. ".." }, "Abandoned change " .. change_id .. " and descendants", true)
+				execute_jj_command({ "jj", "abandon", "-r", "descendants(" .. change_id .. ")" }, "Abandoned change " .. change_id .. " and descendants", true)
 			else
 				vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
 			end
