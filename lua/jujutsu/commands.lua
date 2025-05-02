@@ -939,7 +939,7 @@ function Commands.commit_change()
 		execute_jj_command({ "jj", "commit" }, "Committed change with existing message", true)
 	else
 		vim.ui.input({ prompt = "Commit message: ", default = "", completion = "file" }, function(input)
-			if not input then
+			if input == nil then
 				vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
 			elseif input == "" then
 				vim.api.nvim_echo({ { "Commit cancelled: Empty message not allowed.", "WarningMsg" } }, false, {})
