@@ -121,6 +121,8 @@ function OperationsLog.show_operations_log()
       vim.api.nvim_win_set_buf(current_win, M_ref.operations_log_buf)
       vim.bo[M_ref.operations_log_buf].modifiable = false
       vim.bo[M_ref.operations_log_buf].readonly = true
+      -- Ensure cursor starts at the top of the buffer
+      vim.api.nvim_win_set_cursor(current_win, {1, 0})
     end
   })
 end
