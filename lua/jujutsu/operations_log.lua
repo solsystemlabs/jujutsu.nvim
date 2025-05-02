@@ -30,6 +30,14 @@ local function setup_operations_log_buffer_keymaps(buf)
   end
 end
 
+-- Function to extract operation ID from a line
+local function extract_operation_id(line)
+  -- Look for the operation ID which typically follows the ○ or @ symbol
+  -- It might be in a format like "○ operation_id description"
+  local op_id = line:match("^[@○]%s+(%S+)")
+  return op_id
+end
+
 -- Function to find the next or previous node (line starting with ○ or @)
 function OperationsLog.jump_next_node()
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -48,6 +56,13 @@ function OperationsLog.jump_next_node()
 
   if found_line then
     vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+    local lines = vim.api.nvim_buf_get_lines(0, found_line - 1, found_line, false)
+    if lines and #lines > 0 then
+      local op_id = extract_operation_id(lines[1])
+      if op_id then
+        vim.api.nvim_echo({ { "Operation ID: " .. op_id, "Normal" } }, false, {})
+      end
+    end
   else
     vim.api.nvim_echo({ { "No more nodes below", "WarningMsg" } }, false, {})
   end
@@ -69,6 +84,13 @@ function OperationsLog.jump_prev_node()
 
   if found_line then
     vim.api.nvim_win_set_cursor(0, { found_line, 0 })
+    local lines = vim.api.nvim_buf_get_lines(0, found_line - 1, found_line, false)
+    if lines and #lines > 0 then
+      local op_id = extract_operation_id(lines[1])
+      if op_id then
+        vim.api.nvim_echo({ { "Operation ID: " .. op_id, "Normal" } }, false, {})
+      end
+    end
   else
     vim.api.nvim_echo({ { "No more nodes above", "WarningMsg" } }, false, {})
   end
