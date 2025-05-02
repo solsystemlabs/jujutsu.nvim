@@ -153,9 +153,9 @@ local function setup_log_buffer_keymaps(buf)
 	map('sq', ':lua require("jujutsu").squash_change()<CR>', "[S]quash change")
 	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
-	map('f', ':lua require("jujutsu").git_fetch()<CR>', "Git [F]etch latest changes")
-	map('am', ':lua require("jujutsu").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
-	map('ad', ':lua require("jujutsu").abandon_change_and_descendants()<CR>', "[A]bandon change and [D]escendants")
+	map('f', ':lua require("jujutsu.commands").git_fetch()<CR>', "Git [F]etch latest changes")
+	map('am', ':lua require("jujutsu.commands").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
+	map('ad', ':lua require("jujutsu.commands").abandon_change_and_descendants()<CR>', "[A]bandon change and [D]escendants")
 end
 
 -- Helper function to refresh log buffer with jj log and the current settings
