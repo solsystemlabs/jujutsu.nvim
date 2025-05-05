@@ -958,7 +958,8 @@ function Commands.commit_change()
 	current_description = current_description:gsub("^%s*(.-)%s*$", "%1")
 	if current_description ~= "" and current_description:lower() ~= "(no description set)" then
 		local cmd_parts = { "jj", "commit" }
-		local output = vim.fn.system(cmd_parts .. { " 2>&1" })
+		local cmd_str = table.concat(cmd_parts, " ")
+		local output = vim.fn.system(cmd_str .. " 2>&1")
 		if vim.v.shell_error ~= 0 then
 			if output and output:find("use --allow-new", 1, true) then
 				vim.ui.select({ "Yes", "No" }, { prompt = "No current change to commit. Create a new change with --allow-new?" }, function(choice)
@@ -982,7 +983,8 @@ function Commands.commit_change()
 				vim.api.nvim_echo({ { "Commit cancelled: Empty message not allowed.", "WarningMsg" } }, false, {})
 			else
 				local cmd_parts = { "jj", "commit", "-m", input }
-				local output = vim.fn.system(cmd_parts .. { " 2>&1" })
+				local cmd_str = table.concat(cmd_parts, " ")
+				local output = vim.fn.system(cmd_str .. " 2>&1")
 				if vim.v.shell_error ~= 0 then
 					if output and output:find("use --allow-new", 1, true) then
 						vim.ui.select({ "Yes", "No" }, { prompt = "No current change to commit. Create a new change with --allow-new?" }, function(choice)
