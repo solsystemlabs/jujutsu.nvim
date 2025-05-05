@@ -957,24 +957,13 @@ function Commands.commit_change()
 	end
 	current_description = current_description:gsub("^%s*(.-)%s*$", "%1")
 	if current_description ~= "" and current_description:lower() ~= "(no description set)" then
-		local cmd_parts = { "jj", "commit" }
-		local cmd_str = table.concat(cmd_parts, " ")
-		local output = vim.fn.system(cmd_str .. " 2>&1")
-		if vim.v.shell_error ~= 0 then
-			if output and output:find("use --allow-new", 1, true) then
-				vim.ui.select({ "Yes", "No" }, { prompt = "No current change to commit. Create a new change with --allow-new?" }, function(choice)
-					if choice == "Yes" then
-						execute_jj_command({ "jj", "commit", "--allow-new" }, "Committed new change with existing message", true)
-					else
-						vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
-					end
-				end)
+		vim.ui.select({ "Yes", "No" }, { prompt = "Commit with existing description?" }, function(choice)
+			if choice == "Yes" then
+				execute_jj_command({ "jj", "commit" }, "Committed change with existing message", true)
 			else
-				vim.api.nvim_echo({ { "Error committing change: " .. output, "ErrorMsg" } }, true, {})
+				vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
 			end
-		else
-			execute_jj_command(cmd_parts, "Committed change with existing message", true)
-		end
+		end)
 	else
 		vim.ui.input({ prompt = "Commit message: ", default = "", completion = "file" }, function(input)
 			if input == nil then
@@ -982,24 +971,7 @@ function Commands.commit_change()
 			elseif input == "" then
 				vim.api.nvim_echo({ { "Commit cancelled: Empty message not allowed.", "WarningMsg" } }, false, {})
 			else
-				local cmd_parts = { "jj", "commit", "-m", input }
-				local cmd_str = table.concat(cmd_parts, " ")
-				local output = vim.fn.system(cmd_str .. " 2>&1")
-				if vim.v.shell_error ~= 0 then
-					if output and output:find("use --allow-new", 1, true) then
-						vim.ui.select({ "Yes", "No" }, { prompt = "No current change to commit. Create a new change with --allow-new?" }, function(choice)
-							if choice == "Yes" then
-								execute_jj_command({ "jj", "commit", "-m", input, "--allow-new" }, "Committed new change with message: " .. input, true)
-							else
-								vim.api.nvim_echo({ { "Commit cancelled", "Normal" } }, false, {})
-							end
-						end)
-					else
-						vim.api.nvim_echo({ { "Error committing change: " .. output, "ErrorMsg" } }, true, {})
-					end
-				else
-					execute_jj_command(cmd_parts, "Committed change with message: " .. input, true)
-				end
+				execute_jj_command({ "jj", "commit", "-m", input }, "Committed change with message: " .. input, true)
 			end
 		end)
 	end
