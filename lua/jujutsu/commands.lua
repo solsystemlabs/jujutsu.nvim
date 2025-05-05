@@ -984,9 +984,30 @@ function Commands.squash_change()
 		return
 	end
 
-	local cmd_parts = { "jj", "squash", "-r", change_id }
-	local success_msg = "Squashed change " .. change_id
-	execute_jj_command(cmd_parts, success_msg, true)
+	vim.ui.select({
+		"Squash into parent (default)",
+		"Squash into specific revision",
+		"Cancel"
+	}, { prompt = "Select squash destination for " .. change_id .. ":" }, function(choice)
+		if choice == "Cancel" or not choice then
+			vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+			return
+		end
+
+		if choice == "Squash into parent (default)" then
+			local cmd_parts = { "jj", "squash", "-r", change_id }
+			local success_msg = "Squashed change " .. change_id .. " into parent"
+			execute_jj_command(cmd_parts, success_msg, true)
+		elseif choice == "Squash into specific revision" then
+			select_from_log_window(function(dest_id)
+				if dest_id then
+					local cmd_parts = { "jj", "squash", "-r", change_id, "-d", dest_id }
+					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
+					execute_jj_command(cmd_parts, success_msg, true)
+				end
+			end, "Select destination change for squash, then press ")
+		end
+	end)
 end
 
 function Commands.squash_workflow()
