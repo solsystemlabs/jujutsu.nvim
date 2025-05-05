@@ -44,6 +44,7 @@ local log_keymaps_info = {
 	{ key = "df", desc = "Show [D]iff of current change" },
 	{ key = "f",  desc = "Git [F]etch latest changes" },
 	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
+	{ key = "u",  desc = "Undo last operation (jj undo)" },
 }
 
 local revset_templates = {
@@ -142,6 +143,7 @@ local function setup_log_buffer_keymaps(buf)
 	map('r', ':lua require("jujutsu").set_revset_filter()<CR>', "Set revset filter")
 	map('f', ':lua require("jujutsu").search_in_log()<CR>', "Search in log")
 	map('T', ':lua require("jujutsu").change_log_template()<CR>', "Change log template")
+	map('u', ':lua require("jujutsu").undo_operation()<CR>', "Undo last operation (jj undo)")
 	map('c', ':lua require("jujutsu").commit_change()<CR>', "Commit current change")
 	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
 	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")

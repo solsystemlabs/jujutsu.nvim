@@ -1130,6 +1130,17 @@ function Commands.rebase_onto_master()
 	execute_jj_command({ "jj", "rebase", "-b", "@", "-d", "master" }, "Rebased current branch onto master", true)
 end
 
+-- Function to execute jj undo command
+function Commands.undo_operation()
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to undo the last operation?" }, function(choice)
+		if choice == "Yes" then
+			execute_jj_command({ "jj", "undo" }, "Undid last operation", true)
+		else
+			vim.api.nvim_echo({ { "Undo operation cancelled", "Normal" } }, false, {})
+		end
+	end)
+end
+
 -- Function to show diff of a change
 function Commands.show_diff()
 	local change_id = Utils.extract_change_id(vim.api.nvim_get_current_line()) or "@"
