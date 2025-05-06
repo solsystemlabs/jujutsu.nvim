@@ -132,9 +132,9 @@ local function get_bookmark_names()
 			local remote_info = line:match("^%s+([^%(]+)") or ""
 			local remote_part = remote_info:match("@[^%s%(]+") or ""
 			if remote_part ~= "" then
-				local display_name = current_bookmark .. remote_part
+				local display_name = "  " .. current_bookmark .. remote_part
 				table.insert(names, display_name)
-				bookmark_map[display_name] = current_bookmark .. remote_part
+				bookmark_map[display_name] = current_bookmark
 			end
 		end
 	end
