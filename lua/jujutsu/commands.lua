@@ -116,21 +116,19 @@ local function get_bookmark_names()
 	local bookmark_map = {}
 	local current_bookmark = nil
 	for _, line in ipairs(output) do
-		if line:match("^%s*[^%s%(]+%s*:") then
+		-- First check if the line indicates a deleted bookmark
+		if line:match("%(deleted%)$") then
+			current_bookmark = nil
+		elseif line:match("^%s*[^%s%(]+%s*:") then
 			-- This line contains a bookmark name (not indented much, before a colon)
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
-			-- Skip if the bookmark is marked as deleted
-			if full_name:match("%(deleted%)$") then
-				current_bookmark = nil
+			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
+			if type(cleaned_name) == "string" then
+				table.insert(names, cleaned_name)
+				bookmark_map[cleaned_name] = cleaned_name
+				current_bookmark = cleaned_name
 			else
-				local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
-				if type(cleaned_name) == "string" then
-					table.insert(names, cleaned_name)
-					bookmark_map[cleaned_name] = cleaned_name
-					current_bookmark = cleaned_name
-				else
-					vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
-				end
+				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
 		elseif current_bookmark and line:match("^%s+@") then
 			-- This line contains remote tracking info for the current bookmark (indented)
