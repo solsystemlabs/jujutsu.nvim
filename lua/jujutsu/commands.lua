@@ -115,10 +115,16 @@ local function get_bookmark_names()
 	local names = {}
 	local bookmark_map = {}
 	local current_bookmark = nil
+	local skip_next = false
 	for _, line in ipairs(output) do
+		if skip_next then
+			skip_next = false
+			goto continue
+		end
 		-- First check if the line indicates a deleted bookmark
 		if line:match("%(deleted%)$") then
 			current_bookmark = nil
+			skip_next = true
 		elseif line:match("^%s*[^%s%(]+%s*:") then
 			-- This line contains a bookmark name (not indented much, before a colon)
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
@@ -132,17 +138,15 @@ local function get_bookmark_names()
 			end
 		elseif current_bookmark and line:match("^%s+@") then
 			-- This line contains remote tracking info for the current bookmark (indented)
-			-- Only process if the current bookmark is not deleted
-			if current_bookmark then
-				local remote_info = line:match("^%s+([^%(]+)") or ""
-				local remote_part = remote_info:match("@[^%s%(]+") or ""
-				if remote_part ~= "" then
-					local display_name = "  " .. current_bookmark .. remote_part
-					table.insert(names, display_name)
-					bookmark_map[display_name] = current_bookmark
-				end
+			local remote_info = line:match("^%s+([^%(]+)") or ""
+			local remote_part = remote_info:match("@[^%s%(]+") or ""
+			if remote_part ~= "" then
+				local display_name = "  " .. current_bookmark .. remote_part
+				table.insert(names, display_name)
+				bookmark_map[display_name] = current_bookmark
 			end
 		end
+		::continue::
 	end
 	return names, bookmark_map
 end
