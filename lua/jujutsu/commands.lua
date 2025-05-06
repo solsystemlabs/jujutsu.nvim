@@ -52,10 +52,13 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 			local message = output ~= "" and output or (success_message or "Command completed successfully.")
 			vim.notify(tostring(message), vim.log.levels.INFO, { title = "Jujutsu" })
 			if refresh_log and M_ref and M_ref.refresh_log then
-				-- Defer the refresh to avoid fast event context issues
+				-- Defer the refresh with a longer delay to avoid conflicts with other plugins
 				vim.defer_fn(function()
-					M_ref.refresh_log()
-				end, 0)
+					-- Double-check if the log window still exists before refreshing
+					if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+						M_ref.refresh_log()
+					end
+				end, 100) -- Increased delay to 100ms
 			end
 		else
 			local error_text = format_error_output(error_output, code)

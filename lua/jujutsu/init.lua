@@ -32,15 +32,19 @@ Status.init(M)
 Commands.init(M)
 OperationsLog.init(M)
 
--- Delegate log refresh calls... (unchanged)
+-- Delegate log refresh calls with safety checks
 function M.refresh_log()
 	if M.log_win then
 		-- Defer the check and refresh to avoid fast event context issues
 		vim.defer_fn(function()
 			if M.log_win and vim.api.nvim_win_is_valid(M.log_win) then
+				-- Ensure the buffer is still valid or recreate if needed
+				if not M.log_buf or not vim.api.nvim_buf_is_valid(M.log_buf) then
+					M.log_buf = nil
+				end
 				Log.refresh_log_buffer()
 			end
-		end, 0)
+		end, 50) -- Slight delay to ensure other operations complete
 	end
 end
 
