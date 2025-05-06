@@ -15,36 +15,44 @@ local Utils = require("jujutsu.utils")
 local M_ref = nil
 Log.help_win_id = nil -- For the help window
 
--- Define the keymaps specific to the log window for the help display
+-- Define the keymaps specific to the log window for the help display, grouped by logical operation
 local log_keymaps_info = {
+	{ group = "Window Management" },
 	{ key = "?",  desc = "Toggle keymap help" },
 	{ key = "q",  desc = "Close log window" },
+	{ key = "st", desc = "Show status window (jj st)" },
+	{ group = "Navigation" },
 	{ key = "j",  desc = "Jump to next change" },
 	{ key = "k",  desc = "Jump to previous change" },
-	{ key = "e",  desc = "Edit current change (jj edit)" },
-	{ key = "d",  desc = "Edit change description (jj describe)" },
-	{ key = "n",  desc = "Create new change (jj new)" },
+	{ group = "Change Management" },
 	{ key = "a",  desc = "Abandon change (jj abandon)" },
 	{ key = "ad", desc = "[A]bandon change and [D]escendants" },
+	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
 	{ key = "c",  desc = "Commit current change (jj commit)" },
-	{ key = "st", desc = "Show status window (jj st)" },
-	{ key = "l",  desc = "Set log entry limit (-n)" },
-	{ key = "r",  desc = "Set revset filter (-r)" },
-	{ key = "f",  desc = "Search in log (diff_contains)" },
-	{ key = "T",  desc = "Change log template (-T)" },
-	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
-	{ key = "bd", desc = "[B]ookmark [D]elete..." },
-	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
-	{ key = "p",  desc = "Push changes (jj git push)" },
+	{ key = "d",  desc = "Edit change description (jj describe)" },
+	{ key = "e",  desc = "Edit current change (jj edit)" },
+	{ key = "n",  desc = "Create new change (jj new)" },
+	{ key = "u",  desc = "Undo last operation (jj undo)" },
+	{ group = "Change Modification" },
 	{ key = "rb", desc = "[R]e[B]ase change" },
 	{ key = "rm", desc = "[R]ebase onto [M]aster" },
 	{ key = "s",  desc = "[S]plit change" },
 	{ key = "sq", desc = "[S]quash change" },
 	{ key = "sw", desc = "[S]quash [W]orkflow" },
-	{ key = "df", desc = "Show [D]iff of current change" },
+	{ group = "Bookmark Management" },
+	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
+	{ key = "bd", desc = "[B]ookmark [D]elete..." },
+	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
+	{ group = "Git Operations" },
 	{ key = "f",  desc = "Git [F]etch latest changes" },
-	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
-	{ key = "u",  desc = "Undo last operation (jj undo)" },
+	{ key = "p",  desc = "Push changes (jj git push)" },
+	{ group = "Log Display Options" },
+	{ key = "f",  desc = "Search in log (diff_contains)" },
+	{ key = "l",  desc = "Set log entry limit (-n)" },
+	{ key = "r",  desc = "Set revset filter (-r)" },
+	{ key = "T",  desc = "Change log template (-T)" },
+	{ group = "Information" },
+	{ key = "df", desc = "Show [D]iff of current change" },
 }
 
 local revset_templates = {
@@ -78,27 +86,44 @@ function Log.toggle_help_window()
 	if Log.help_win_id and vim.api.nvim_win_is_valid(Log.help_win_id) then
 		Log.close_help_window(); return
 	end
-	local help_content = { " Jujutsu Log Keymaps ", "-----------------------" }
+	local help_content = { " Jujutsu Log Keymaps ", "=======================" }
 	local max_key_len = 0
-	for _, map_info in ipairs(log_keymaps_info) do max_key_len = math.max(max_key_len, #map_info.key) end
-	for _, map_info in ipairs(log_keymaps_info) do
-		local key_padding = string.rep(" ", max_key_len - #map_info.key)
-		table.insert(help_content, string.format("  %s%s : %s", map_info.key, key_padding, map_info.desc))
+	for _, map_info in ipairs(log_keymaps_info) do 
+		if map_info.key then
+			max_key_len = math.max(max_key_len, #map_info.key)
+		end
 	end
-	table.insert(help_content, "-----------------------"); table.insert(help_content,
-		" Press 'q' or '<Esc>' to close this help window.")
+	local current_group = ""
+	for _, map_info in ipairs(log_keymaps_info) do
+		if map_info.group then
+			if current_group ~= "" then
+				table.insert(help_content, "")
+			end
+			table.insert(help_content, " " .. map_info.group)
+			table.insert(help_content, " -----------------------")
+			current_group = map_info.group
+		else
+			local key_padding = string.rep(" ", max_key_len - #map_info.key)
+			table.insert(help_content, string.format("   %s%s : %s", map_info.key, key_padding, map_info.desc))
+		end
+	end
+	table.insert(help_content, "=======================")
+	table.insert(help_content, " Press 'q' or '<Esc>' to close this help window.")
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_content)
-	vim.api.nvim_buf_set_option(buf, 'readonly', true); vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile'); vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe'); vim.api
-			.nvim_buf_set_option(buf, 'swapfile', false)
-	local content_width = 0; for _, line in ipairs(help_content) do
-		content_width = math.max(content_width,
-			vim.fn.strdisplaywidth(line))
+	vim.api.nvim_buf_set_option(buf, 'readonly', true)
+	vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+	vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+	vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+	vim.api.nvim_buf_set_option(buf, 'swapfile', false)
+	local content_width = 0
+	for _, line in ipairs(help_content) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
 	end
-	local width = math.max(40, math.min(content_width + 4, vim.o.columns - 4)); local height = math.min(#help_content,
-		vim.o.lines - 4)
-	local row = math.floor((vim.o.lines - height) / 2); local col = math.floor((vim.o.columns - width) / 2)
+	local width = math.max(40, math.min(content_width + 4, vim.o.columns - 4))
+	local height = math.min(#help_content, vim.o.lines - 4)
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
 	local win_opts = {
 		relative = "editor",
 		width = width,
@@ -106,18 +131,24 @@ function Log.toggle_help_window()
 		row = row,
 		col = col,
 		style = "minimal",
-		border =
-		"rounded"
+		border = "rounded"
 	}
 	local win_id = vim.api.nvim_open_win(buf, true, win_opts)
 	if not win_id or not vim.api.nvim_win_is_valid(win_id) then
-		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {}); vim.api.nvim_buf_delete(buf,
-			{ force = true }); return
+		vim.api.nvim_echo({ { "Failed to open help window.", "ErrorMsg" } }, true, {})
+		vim.api.nvim_buf_delete(buf, { force = true })
+		return
 	end
 	Log.help_win_id = win_id
 	local keymap_opts = { noremap = true, silent = true, buffer = buf }
 	vim.keymap.set('n', 'q', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
 	vim.keymap.set('n', '<Esc>', ':lua require("jujutsu.log").close_help_window()<CR>', keymap_opts)
+	-- Add syntax highlighting for group headers
+	vim.cmd("syntax match JujutsuHelpGroup /^ \\w\\+.*$/")
+	vim.cmd("highlight JujutsuHelpGroup guifg=Yellow gui=bold")
+	-- Add syntax highlighting for keys
+	vim.cmd("syntax match JujutsuHelpKey /^\\s\\+\\zs\\w\\+\\ze\\s\\+:/")
+	vim.cmd("highlight JujutsuHelpKey guifg=Cyan")
 end
 
 -- Helper function to set keymaps for log buffer
