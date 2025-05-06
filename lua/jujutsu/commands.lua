@@ -105,7 +105,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	end
 end
 
--- Helper function to get existing bookmark names
+-- Helper function to get existing bookmark names, excluding deleted ones
 local function get_bookmark_names()
 	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
 	if vim.v.shell_error ~= 0 then
@@ -116,17 +116,21 @@ local function get_bookmark_names()
 	local bookmark_map = {}
 	local current_bookmark = nil
 	for _, line in ipairs(output) do
-		vim.api.nvim_echo({ { line, "ErrorMsg" } }, true, {})
 		if line:match("^%s*[^%s%(]+%s*:") then
 			-- This line contains a bookmark name (not indented much, before a colon)
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
-			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
-			if type(cleaned_name) == "string" then
-				table.insert(names, cleaned_name)
-				bookmark_map[cleaned_name] = cleaned_name
-				current_bookmark = cleaned_name
+			-- Skip if the bookmark is marked as deleted
+			if full_name:match("%(deleted%)$") then
+				current_bookmark = nil
 			else
-				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
+				local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
+				if type(cleaned_name) == "string" then
+					table.insert(names, cleaned_name)
+					bookmark_map[cleaned_name] = cleaned_name
+					current_bookmark = cleaned_name
+				else
+					vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
+				end
 			end
 		elseif current_bookmark and line:match("^%s+@") then
 			-- This line contains remote tracking info for the current bookmark (indented)
