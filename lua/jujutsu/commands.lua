@@ -116,6 +116,7 @@ local function get_bookmark_names()
 	local bookmark_map = {}
 	local current_bookmark = nil
 	for _, line in ipairs(output) do
+		vim.api.nvim_echo({ { line, "ErrorMsg" } }, true, {})
 		if line:match("^%s*[^%s%(]+%s*:") then
 			-- This line contains a bookmark name (not indented much, before a colon)
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
@@ -514,7 +515,7 @@ function Commands.git_push()
 						local new_cmd_parts = { "jj", "git", "push", "--allow-new" }
 						local new_cmd_str = table.concat(new_cmd_parts, " ")
 						vim.notify("Running: " .. new_cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
-						
+
 						if vim.system then
 							vim.system(new_cmd_parts, { text = true }, function(new_obj)
 								handle_push_result(new_obj, nil, true)
@@ -719,10 +720,12 @@ function Commands.abandon_change_and_descendants()
 		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
 		return
 	end
-	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to abandon change " .. change_id .. " and all its descendants?" },
+	vim.ui.select({ "Yes", "No" },
+		{ prompt = "Are you sure you want to abandon change " .. change_id .. " and all its descendants?" },
 		function(choice)
 			if choice == "Yes" then
-				execute_jj_command({ "jj", "abandon", "-r", "descendants(" .. change_id .. ")" }, "Abandoned change " .. change_id .. " and descendants", true)
+				execute_jj_command({ "jj", "abandon", "-r", "descendants(" .. change_id .. ")" },
+					"Abandoned change " .. change_id .. " and descendants", true)
 			else
 				vim.api.nvim_echo({ { "Abandon cancelled", "Normal" } }, false, {})
 			end
