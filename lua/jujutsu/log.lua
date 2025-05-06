@@ -648,10 +648,12 @@ function Log.toggle_log_window()
 	end
 
 	-- Set window options if needed (like size)
-	vim.cmd("vertical resize 80")
+	vim.cmd("vertical resize " .. M_ref.window_sizes.log)
 	
 	-- Disable cursor wrapping in the log window
 	vim.api.nvim_win_set_option(M_ref.log_win, 'wrap', false)
+	-- Prevent automatic resizing
+	vim.api.nvim_win_set_option(M_ref.log_win, 'winfixwidth', true)
 
 	-- Call refresh_log_buffer, which will now:
 	-- 1. Create the actual content buffer

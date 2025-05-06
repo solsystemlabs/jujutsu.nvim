@@ -114,7 +114,9 @@ function OperationsLog.show_operations_log()
   end
 
   -- Set window options (like size)
-  vim.cmd("vertical resize 80")
+  vim.cmd("vertical resize " .. M_ref.window_sizes.operations_log)
+  -- Prevent automatic resizing
+  vim.api.nvim_win_set_option(M_ref.operations_log_win, 'winfixwidth', true)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(buf, "JJ Operations Log")

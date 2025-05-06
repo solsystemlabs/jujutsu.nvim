@@ -25,6 +25,7 @@ M.operations_log_buf = nil
 M.operations_log_win = nil
 M.log_settings = { limit = "", revset = "", template = "", search_pattern = "" }
 M.is_operation_log = false
+M.window_sizes = { log = 80, operations_log = 80, status = 40 }
 
 -- Initialize submodules
 Log.init(M)
