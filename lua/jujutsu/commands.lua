@@ -53,22 +53,29 @@ local function get_bookmark_names()
 		::continue::
 	end
 
-	-- Fetch remote branches
-	local remote_output = vim.fn.systemlist({ "jj", "branch", "list", "--all" })
+	-- Fetch remote bookmarks
+	local remote_output = vim.fn.systemlist({ "jj", "bookmark", "list", "--all" })
 	if vim.v.shell_error ~= 0 then
-		vim.api.nvim_echo({ { "Error getting remote branch list.", "ErrorMsg" } }, true, {})
+		vim.api.nvim_echo({ { "Error getting remote bookmark list.", "ErrorMsg" } }, true, {})
 		return local_names, {}, bookmark_map
 	end
 
 	local remote_names = {}
+	local current_bookmark = nil
 	for _, line in ipairs(remote_output) do
-		if line:match("@origin") then
-			local branch_name = line:match("^([^%s%(]+)")
+		if line:match("@origin:") and not line:match("%(deleted%)$") then
+			local branch_name = line:match("^([^%s%(]+)@origin:")
 			if branch_name then
-				local display_name = branch_name
-				table.insert(remote_names, display_name)
-				bookmark_map[display_name] = branch_name
+				current_bookmark = branch_name
+				table.insert(remote_names, branch_name)
+				bookmark_map[branch_name] = branch_name
 			end
+		elseif current_bookmark and line:match("^%s+@origin:") then
+			-- Additional info for the current bookmark
+			table.insert(remote_names, line)
+		elseif current_bookmark and line:match("^%s+@git:") then
+			-- Additional info for the current bookmark
+			table.insert(remote_names, line)
 		end
 	end
 
