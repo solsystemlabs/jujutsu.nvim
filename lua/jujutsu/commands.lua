@@ -1108,7 +1108,7 @@ function Commands.squash_workflow()
 				end
 
 				local function handle_destination_selection(dest_id)
-					local cmd_parts = { "jj", "squash", "-r", change_id, "-t", dest_id }
+					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
 
 					vim.ui.select({
