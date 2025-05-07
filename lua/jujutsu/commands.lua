@@ -124,12 +124,16 @@ local function select_bookmark(prompt, callback)
 	vim.system({"jj", "git", "fetch"}, { text = true }, function(obj)
 		if obj.code == 0 then
 			vim.notify("Remote branches fetched.", vim.log.levels.INFO, { title = "Jujutsu" })
-			-- Refresh bookmark names after fetch
-			local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
-			show_selector()
+			-- Defer the refresh of bookmark names to avoid fast event context issues
+			vim.defer_fn(function()
+				local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+				show_selector()
+			end, 0)
 		else
 			vim.notify("Error fetching remote branches: " .. (obj.stderr or ""), vim.log.levels.ERROR, { title = "Jujutsu Error" })
-			show_selector()
+			vim.defer_fn(function()
+				show_selector()
+			end, 0)
 		end
 	end)
 end
