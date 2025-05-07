@@ -105,7 +105,8 @@ local function select_bookmark(prompt, callback)
 				vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
 				return
 			else
-				callback(bookmark_map[choice] or choice)
+				-- Use the mapped value which has @origin stripped for remote bookmarks
+				callback(bookmark_map[choice])
 			end
 		end)
 
