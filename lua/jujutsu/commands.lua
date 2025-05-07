@@ -65,7 +65,7 @@ local function get_bookmark_names()
 		if line:match("@origin") then
 			local branch_name = line:match("^([^%s%(]+)")
 			if branch_name then
-				local display_name = branch_name .. "@origin"
+				local display_name = branch_name
 				table.insert(remote_names, display_name)
 				bookmark_map[display_name] = branch_name
 			end
