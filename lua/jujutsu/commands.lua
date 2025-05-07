@@ -29,6 +29,84 @@ local function format_error_output(output, shell_error_code)
 	return error_text:gsub("[\n\r]+$", "")
 end
 
+-- Helper function to get existing bookmark names, excluding deleted ones
+local function get_bookmark_names()
+	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
+	if vim.v.shell_error ~= 0 then
+		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
+		return nil
+	end
+	local local_names = {}
+	local remote_names = {}
+	local bookmark_map = {}
+	local current_bookmark = nil
+	local skip_next = false
+	for _, line in ipairs(output) do
+		if skip_next then
+			skip_next = false
+			goto continue
+		end
+		-- First check if the line indicates a deleted bookmark
+		if line:match("%(deleted%)$") then
+			current_bookmark = nil
+			skip_next = true
+		elseif line:match("^%s*[^%s%(]+%s*:") then
+			-- This line contains a bookmark name (not indented much, before a colon)
+			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
+			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
+			if type(cleaned_name) == "string" then
+				table.insert(local_names, cleaned_name)
+				bookmark_map[cleaned_name] = cleaned_name
+				current_bookmark = cleaned_name
+			else
+				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
+			end
+		elseif current_bookmark and line:match("^%s+@") then
+			-- This line contains remote tracking info for the current bookmark (indented)
+			local remote_info = line:match("^%s+([^%(]+)") or ""
+			local remote_part = remote_info:match("@[^%s%(]+") or ""
+			if remote_part ~= "" then
+				local display_name = "  " .. remote_part
+				table.insert(remote_names, display_name)
+				bookmark_map[display_name] = current_bookmark
+			end
+		end
+		::continue::
+	end
+	return local_names, remote_names, bookmark_map
+end
+
+local function select_bookmark(prompt, callback)
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks then
+		vim.api.nvim_echo({ { "Error retrieving bookmarks.", "ErrorMsg" } }, false, {})
+		return
+	end
+
+	local show_local = true
+
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Toggle Local/Remote")
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined, { prompt = prompt }, function(choice)
+			if not choice or choice == "Cancel" then
+				vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
+				return
+			elseif choice == "Toggle Local/Remote" then
+				show_local = not show_local
+				show_selector()
+			else
+				callback(bookmark_map[choice] or choice)
+			end
+		end)
+	end
+
+	show_selector()
+end
+
 -- Execute a jj command and refresh log if necessary
 -- Returns true on success, false on failure
 local function execute_jj_command(command_parts, success_message, refresh_log)
@@ -105,52 +183,6 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	end
 end
 
--- Helper function to get existing bookmark names, excluding deleted ones
-local function get_bookmark_names()
-	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
-	if vim.v.shell_error ~= 0 then
-		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
-		return nil
-	end
-	local local_names = {}
-	local remote_names = {}
-	local bookmark_map = {}
-	local current_bookmark = nil
-	local skip_next = false
-	for _, line in ipairs(output) do
-		if skip_next then
-			skip_next = false
-			goto continue
-		end
-		-- First check if the line indicates a deleted bookmark
-		if line:match("%(deleted%)$") then
-			current_bookmark = nil
-			skip_next = true
-		elseif line:match("^%s*[^%s%(]+%s*:") then
-			-- This line contains a bookmark name (not indented much, before a colon)
-			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
-			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
-			if type(cleaned_name) == "string" then
-				table.insert(local_names, cleaned_name)
-				bookmark_map[cleaned_name] = cleaned_name
-				current_bookmark = cleaned_name
-			else
-				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
-			end
-		elseif current_bookmark and line:match("^%s+@") then
-			-- This line contains remote tracking info for the current bookmark (indented)
-			local remote_info = line:match("^%s+([^%(]+)") or ""
-			local remote_part = remote_info:match("@[^%s%(]+") or ""
-			if remote_part ~= "" then
-				local display_name = "  " .. remote_part
-				table.insert(remote_names, display_name)
-				bookmark_map[display_name] = current_bookmark
-			end
-		end
-		::continue::
-	end
-	return local_names, remote_names, bookmark_map
-end
 
 -- Helper function to format changes for selection UI
 local function format_changes_for_selection(changes)
@@ -370,14 +402,8 @@ function Commands.new_change()
 					end
 				end)
 			elseif choice == "Create based on bookmark" then
-				local bookmark_names, bookmark_map = get_bookmark_names()
-				if not bookmark_names or #bookmark_names == 0 then
-					vim.api.nvim_echo({ { "No bookmarks found to base new change on.", "WarningMsg" } }, false, {})
-					return
-				end
-				vim.ui.select(bookmark_names, { prompt = "Select bookmark to base new change on:" }, function(bookmark_full)
-					if bookmark_full then
-						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+				select_bookmark("Select bookmark to base new change on:", function(bookmark)
+					if bookmark then
 						local cmd_parts = { "jj", "new", bookmark }
 						if description ~= "" then
 							table.insert(cmd_parts, "-m")
@@ -484,9 +510,8 @@ function Commands.rebase_change()
 					vim.api.nvim_echo({ { "No bookmarks found to rebase onto.", "WarningMsg" } }, false, {})
 					return
 				end
-				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark_full)
-					if bookmark_full then
-						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+				select_bookmark("Select bookmark to rebase onto:", function(bookmark)
+					if bookmark then
 						handle_destination_selection(bookmark)
 					end
 				end)
@@ -680,35 +705,21 @@ function Commands.move_bookmark()
 	end
 
 	local show_local = true
-	local function display_bookmarks()
-		local options = show_local and local_bookmarks or remote_bookmarks
-		local prompt = show_local and "Select local bookmark (T to toggle remote):" or "Select remote bookmark (T to toggle local):"
-		table.insert(options, "Create new bookmark...")
-		table.insert(options, "Toggle Local/Remote")
-		
-		vim.ui.select(options, { prompt = prompt }, function(selected)
-			if not selected then
-				vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-			elseif selected == "Toggle Local/Remote" then
-				show_local = not show_local
-				display_bookmarks()
-			elseif selected == "Create new bookmark..." then
-				vim.ui.input({ prompt = "New bookmark name: " }, function(name)
-					if not name then
-						vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
-					elseif name == "" then
-						vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
-					else
-						move_bookmark_to_change(name, change_id)
-					end
-				end)
-			else
-				move_bookmark_to_change(bookmark_map[selected] or selected, change_id)
-			end
-		end)
-	end
-
-	display_bookmarks()
+	select_bookmark("Select bookmark to move:", function(selected)
+		if not selected then
+			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+		elseif selected == "Create new bookmark..." then
+			vim.ui.input({ prompt = "New bookmark name: " }, function(name)
+				if not name or name == "" then
+					vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
+				else
+					move_bookmark_to_change(name, change_id)
+				end
+			end)
+		else
+			move_bookmark_to_change(selected, change_id)
+		end
+	end)
 end
 
 function Commands.edit_change()
