@@ -88,20 +88,25 @@ local function select_bookmark(prompt, callback)
 	local function show_selector()
 		local options = show_local and local_bookmarks or remote_bookmarks
 		local combined = vim.deepcopy(options)
-		table.insert(combined, "Toggle Local/Remote")
 		table.insert(combined, "Cancel")
 
-		vim.ui.select(combined, { prompt = prompt }, function(choice)
+		vim.ui.select(combined, { prompt = prompt .. (show_local and " (Local)" or " (Remote)") .. " [T to toggle]" }, function(choice)
 			if not choice or choice == "Cancel" then
 				vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
 				return
-			elseif choice == "Toggle Local/Remote" then
-				show_local = not show_local
-				show_selector()
 			else
 				callback(bookmark_map[choice] or choice)
 			end
 		end)
+
+		-- Set up a keymap for toggling between local and remote
+		local buf = vim.api.nvim_get_current_buf()
+		local opts = { noremap = true, silent = true, buffer = buf }
+		vim.keymap.set("n", "T", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, opts)
 	end
 
 	show_selector()
