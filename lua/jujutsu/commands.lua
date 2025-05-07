@@ -1097,38 +1097,54 @@ function Commands.squash_workflow()
 				execute_jj_command(cmd_parts, success_msg, true)
 			end)
 		elseif workflow == "Squash into specific revision" then
-			vim.ui.input({ prompt = "Enter target revision for squash (default: parent): ", default = "" }, function(target)
-				if target == nil then
-					vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+			vim.ui.select({
+				"Select change from log window",
+				"Select bookmark",
+				"Cancel"
+			}, { prompt = "Select destination for squash:" }, function(dest_choice)
+				if dest_choice == "Cancel" or not dest_choice then
+					vim.api.nvim_echo({ { "Squash destination selection cancelled", "Normal" } }, false, {})
 					return
 				end
 
-				local cmd_parts = { "jj", "squash", "-r", change_id }
-				local success_msg = "Squashed change " .. change_id
-				if target ~= "" then
-					table.insert(cmd_parts, "-t")
-					table.insert(cmd_parts, target)
-					success_msg = success_msg .. " into " .. target
-				else
-					success_msg = success_msg .. " into parent"
+				local function handle_destination_selection(dest_id)
+					local cmd_parts = { "jj", "squash", "-r", change_id, "-t", dest_id }
+					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
+
+					vim.ui.select({
+						"Non-interactively",
+						"Interactively",
+						"Cancel"
+					}, { prompt = "Select mode for squashing:" }, function(mode)
+						if mode == "Cancel" or not mode then
+							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							return
+						end
+
+						if mode == "Interactively" then
+							table.insert(cmd_parts, "-i")
+							success_msg = success_msg .. " interactively"
+						end
+						execute_jj_command(cmd_parts, success_msg, true)
+					end)
 				end
 
-				vim.ui.select({
-					"Non-interactively",
-					"Interactively",
-					"Cancel"
-				}, { prompt = "Select mode for squashing:" }, function(mode)
-					if mode == "Cancel" or not mode then
-						vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+				if dest_choice == "Select change from log window" then
+					select_from_log_window(function(dest_id)
+						if dest_id then handle_destination_selection(dest_id) end
+					end, "Select destination change for squash, then press ")
+				else
+					local bookmark_names, _, bookmark_map = get_bookmark_names()
+					if not bookmark_names or #bookmark_names == 0 then
+						vim.api.nvim_echo({ { "No bookmarks found to squash into.", "WarningMsg" } }, false, {})
 						return
 					end
-
-					if mode == "Interactively" then
-						table.insert(cmd_parts, "-i")
-						success_msg = success_msg .. " interactively"
-					end
-					execute_jj_command(cmd_parts, success_msg, true)
-				end)
+					select_bookmark("Select bookmark to squash into:", function(bookmark)
+						if bookmark then
+							handle_destination_selection(bookmark)
+						end
+					end)
+				end
 			end)
 		elseif workflow == "Squash with custom options" then
 			vim.ui.input({ prompt = "Enter custom squash options (e.g., -m 'message'): ", default = "" }, function(options)
