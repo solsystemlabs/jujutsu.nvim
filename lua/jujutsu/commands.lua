@@ -16,16 +16,10 @@ local M_ref = nil
 
 -- Helper function to format error output
 local function format_error_output(output, shell_error_code)
-	local error_text
-	if output == nil then
-		error_text = "(No error output captured)"
-	elseif type(output) ~= "string" then
-		error_text = "(Non-string error output: " .. type(output) .. ")"
-	elseif output == "" then
-		error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
-	else
-		error_text = output
-	end
+	local error_text = output == nil and "(No error output captured)" or
+	                  type(output) ~= "string" and "(Non-string error output: " .. type(output) .. ")" or
+	                  output == "" and "(Empty error output, shell error code: " .. shell_error_code .. ")" or
+	                  output
 	return error_text:gsub("[\n\r]+$", "")
 end
 
@@ -38,25 +32,20 @@ local function get_bookmark_names()
 	end
 	local local_names = {}
 	local bookmark_map = {}
-	local current_bookmark = nil
 	local skip_next = false
 	for _, line in ipairs(output) do
 		if skip_next then
 			skip_next = false
 			goto continue
 		end
-		-- First check if the line indicates a deleted bookmark
 		if line:match("%(deleted%)$") then
-			current_bookmark = nil
 			skip_next = true
 		elseif line:match("^%s*[^%s%(]+%s*:") then
-			-- This line contains a bookmark name (not indented much, before a colon)
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
 			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
 			if type(cleaned_name) == "string" then
 				table.insert(local_names, cleaned_name)
 				bookmark_map[cleaned_name] = cleaned_name
-				current_bookmark = cleaned_name
 			else
 				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
@@ -111,13 +100,11 @@ local function select_bookmark(prompt, callback)
 		end)
 
 		-- Set up a keymap for toggling between local and remote
-		local buf = vim.api.nvim_get_current_buf()
-		local opts = { noremap = true, silent = true, buffer = buf }
 		vim.keymap.set("n", "T", function()
 			show_local = not show_local
 			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
 			show_selector()
-		end, opts)
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
 	end
 
 	-- Ensure remote branches are fetched
@@ -152,23 +139,17 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	-- Use vim.system for non-blocking execution if available
 	local output = ""
 	local error_output = ""
-	local completed = false
-	local success = false
 
 	local function on_exit(code)
-		completed = true
 		if code == 0 then
-			success = true
 			local message = output ~= "" and output or (success_message or "Command completed successfully.")
 			vim.notify(tostring(message), vim.log.levels.INFO, { title = "Jujutsu" })
 			if refresh_log and M_ref and M_ref.refresh_log then
-				-- Defer the refresh with a longer delay to avoid conflicts with other plugins
 				vim.defer_fn(function()
-					-- Double-check if the log window still exists before refreshing
 					if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-						M_ref.refresh_log()
+						M_ref.refresh						M_ref.refresh_log()
 					end
-				end, 100) -- Increased delay to 100ms
+				end, 100)
 			end
 		else
 			local error_text = format_error_output(error_output, code)
@@ -177,41 +158,22 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		end
 	end
 
-	local function on_stdout(_, data)
-		if data then
-			output = output .. table.concat(data, "\n")
-		end
-	end
-
-	local function on_stderr(_, data)
-		if data then
-			error_output = error_output .. table.concat(data, "\n")
-		end
-	end
-
-	-- Use vim.system if available for non-blocking execution
 	if vim.system then
 		vim.system(command_parts, { text = true }, function(obj)
 			output = obj.stdout or ""
 			error_output = obj.stderr or ""
 			on_exit(obj.code)
 		end)
+		return true -- Assume success for async, errors will be notified
 	else
-		-- Fallback to blocking call if vim.system is not available
 		output = vim.fn.system(command_parts)
 		if vim.v.shell_error ~= 0 then
 			error_output = vim.fn.system(command_str .. " 2>&1")
 			on_exit(vim.v.shell_error)
-		else
-			on_exit(0)
+			return false
 		end
-	end
-
-	-- Return based on whether it was synchronous or not
-	if completed then
-		return success
-	else
-		return true -- Assume success for async, errors will be notified
+		on_exit(0)
+		return true
 	end
 end
 
@@ -254,18 +216,10 @@ end
 -- Helper function to setup log window selection mapping
 local function setup_log_selection_mapping(buf, current_win, callback)
 	local opts = { noremap = true, silent = true, buffer = buf }
-	local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
-
 	vim.keymap.set("n", "<CR>", function()
 		local line = vim.api.nvim_get_current_line()
 		local selected_id = Utils.extract_change_id(line)
 		vim.keymap.del("n", "<CR>", { buffer = buf })
-
-		if original_cr_mapping and original_cr_mapping.buffer then
-			local restore_cmd = original_cr_mapping.mode .. (original_cr_mapping.noremap == 1 and "noremap" or "map")
-			if original_cr_mapping.silent == 1 then restore_cmd = restore_cmd .. " <silent>" end
-			vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
-		end
 
 		if vim.api.nvim_win_is_valid(current_win) then
 			vim.api.nvim_set_current_win(current_win)
@@ -372,11 +326,10 @@ function Commands.new_change()
 			callback({})
 		end
 
-		local opts = { noremap = true, silent = true, buffer = buf }
-		vim.keymap.set('n', '<Space>', toggle_selection, opts)
-		vim.keymap.set('n', '<CR>', confirm_selection, opts)
-		vim.keymap.set('n', 'q', cancel_selection, opts)
-		vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+		vim.keymap.set('n', '<Space>', toggle_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', '<CR>', confirm_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', 'q', cancel_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', '<Esc>', cancel_selection, { noremap = true, silent = true, buffer = buf })
 
 		vim.api.nvim_win_set_option(win, 'cursorline', true)
 		vim.api.nvim_set_current_buf(buf)
@@ -910,11 +863,10 @@ function Commands.abandon_multiple_changes()
 		vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
 	end
 
-	local opts = { noremap = true, silent = true, buffer = log_buf }
-	vim.keymap.set('n', '<Space>', toggle_selection, opts)
-	vim.keymap.set('n', '<CR>', confirm_selection, opts)
-	vim.keymap.set('n', 'q', cancel_selection, opts)
-	vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+	vim.keymap.set('n', '<Space>', toggle_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', '<CR>', confirm_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', 'q', cancel_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', '<Esc>', cancel_selection, { noremap = true, silent = true, buffer = log_buf })
 
 	vim.api.nvim_win_set_option(M_ref.log_win, 'cursorline', true)
 	vim.api.nvim_set_current_win(M_ref.log_win)
@@ -1243,13 +1195,12 @@ function Commands.show_diff()
 		end
 	})
 
-	local opts = { noremap = true, silent = true, buffer = buf }
 	vim.keymap.set('n', 'q', function()
 		if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-	end, opts)
+	end, { noremap = true, silent = true, buffer = buf })
 	vim.keymap.set('n', '<Esc>', function()
 		if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-	end, opts)
+	end, { noremap = true, silent = true, buffer = buf })
 end
 
 -- Initialize the module with a reference to the main state/module
