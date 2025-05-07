@@ -1050,7 +1050,7 @@ function Commands.squash_change()
 		elseif choice == "Squash into specific revision" then
 			select_from_log_window(function(dest_id)
 				if dest_id then
-					local cmd_parts = { "jj", "squash", "-r", change_id, "-d", dest_id }
+					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
 					execute_jj_command(cmd_parts, success_msg, true)
 				end
@@ -1106,7 +1106,7 @@ function Commands.squash_workflow()
 				local cmd_parts = { "jj", "squash", "-r", change_id }
 				local success_msg = "Squashed change " .. change_id
 				if target ~= "" then
-					table.insert(cmd_parts, "-d")
+					table.insert(cmd_parts, "-t")
 					table.insert(cmd_parts, target)
 					success_msg = success_msg .. " into " .. target
 				else
