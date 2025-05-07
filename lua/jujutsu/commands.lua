@@ -17,9 +17,9 @@ local M_ref = nil
 -- Helper function to format error output
 local function format_error_output(output, shell_error_code)
 	local error_text = output == nil and "(No error output captured)" or
-	                  type(output) ~= "string" and "(Non-string error output: " .. type(output) .. ")" or
-	                  output == "" and "(Empty error output, shell error code: " .. shell_error_code .. ")" or
-	                  output
+			type(output) ~= "string" and "(Non-string error output: " .. type(output) .. ")" or
+			output == "" and "(Empty error output, shell error code: " .. shell_error_code .. ")" or
+			output
 	return error_text:gsub("[\n\r]+$", "")
 end
 
@@ -52,14 +52,14 @@ local function get_bookmark_names()
 		end
 		::continue::
 	end
-	
+
 	-- Fetch remote branches
 	local remote_output = vim.fn.systemlist({ "jj", "branch", "list", "--all" })
 	if vim.v.shell_error ~= 0 then
 		vim.api.nvim_echo({ { "Error getting remote branch list.", "ErrorMsg" } }, true, {})
 		return local_names, {}, bookmark_map
 	end
-	
+
 	local remote_names = {}
 	for _, line in ipairs(remote_output) do
 		if line:match("@origin") then
@@ -71,7 +71,7 @@ local function get_bookmark_names()
 			end
 		end
 	end
-	
+
 	return local_names, remote_names, bookmark_map
 end
 
@@ -89,18 +89,19 @@ local function select_bookmark(prompt, callback)
 		local combined = vim.deepcopy(options)
 		table.insert(combined, "Cancel")
 
-		vim.ui.select(combined, { prompt = prompt .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" }, function(choice)
-			if not choice or choice == "Cancel" then
-				vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
-				return
-			else
-				-- Use the mapped value which has @origin stripped for remote bookmarks
-				callback(bookmark_map[choice])
-			end
-		end)
+		vim.ui.select(combined, { prompt = prompt .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
+					return
+				else
+					-- Use the mapped value which has @origin stripped for remote bookmarks
+					callback(bookmark_map[choice])
+				end
+			end)
 
 		-- Set up a keymap for toggling between local and remote
-		vim.keymap.set({"n", "i"}, "<C-T>", function()
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
 			show_local = not show_local
 			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
 			show_selector()
@@ -109,7 +110,7 @@ local function select_bookmark(prompt, callback)
 
 	-- Ensure remote branches are fetched
 	vim.notify("Fetching remote branches...", vim.log.levels.INFO, { title = "Jujutsu" })
-	vim.system({"jj", "git", "fetch"}, { text = true }, function(obj)
+	vim.system({ "jj", "git", "fetch" }, { text = true }, function(obj)
 		if obj.code == 0 then
 			vim.notify("Remote branches fetched.", vim.log.levels.INFO, { title = "Jujutsu" })
 			-- Defer the refresh of bookmark names to avoid fast event context issues
@@ -118,7 +119,8 @@ local function select_bookmark(prompt, callback)
 				show_selector()
 			end, 0)
 		else
-			vim.notify("Error fetching remote branches: " .. (obj.stderr or ""), vim.log.levels.ERROR, { title = "Jujutsu Error" })
+			vim.notify("Error fetching remote branches: " .. (obj.stderr or ""), vim.log.levels.ERROR,
+				{ title = "Jujutsu Error" })
 			vim.defer_fn(function()
 				show_selector()
 			end, 0)
