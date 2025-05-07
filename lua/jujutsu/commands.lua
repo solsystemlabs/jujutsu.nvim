@@ -147,7 +147,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 			if refresh_log and M_ref and M_ref.refresh_log then
 				vim.defer_fn(function()
 					if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-						M_ref.refresh						M_ref.refresh_log()
+						M_ref.refresh_log()
 					end
 				end, 100)
 			end
