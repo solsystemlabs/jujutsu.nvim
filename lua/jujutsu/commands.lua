@@ -112,7 +112,8 @@ local function get_bookmark_names()
 		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
 		return nil
 	end
-	local names = {}
+	local local_names = {}
+	local remote_names = {}
 	local bookmark_map = {}
 	local current_bookmark = nil
 	local skip_next = false
@@ -130,7 +131,7 @@ local function get_bookmark_names()
 			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
 			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
 			if type(cleaned_name) == "string" then
-				table.insert(names, cleaned_name)
+				table.insert(local_names, cleaned_name)
 				bookmark_map[cleaned_name] = cleaned_name
 				current_bookmark = cleaned_name
 			else
@@ -142,13 +143,13 @@ local function get_bookmark_names()
 			local remote_part = remote_info:match("@[^%s%(]+") or ""
 			if remote_part ~= "" then
 				local display_name = "  " .. remote_part
-				table.insert(names, display_name)
+				table.insert(remote_names, display_name)
 				bookmark_map[display_name] = current_bookmark
 			end
 		end
 		::continue::
 	end
-	return names, bookmark_map
+	return local_names, remote_names, bookmark_map
 end
 
 -- Helper function to format changes for selection UI
@@ -672,30 +673,42 @@ function Commands.move_bookmark()
 		vim.api.nvim_echo({ { "No change ID found on this line to move bookmark to.", "WarningMsg" } }, false, {})
 		return
 	end
-	local existing_bookmarks = get_bookmark_names() or {}
-	local options = {}
-	for _, name in ipairs(existing_bookmarks) do
-		table.insert(options, name)
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks then
+		vim.api.nvim_echo({ { "Error retrieving bookmarks.", "ErrorMsg" } }, false, {})
+		return
 	end
-	table.insert(options, "Create new bookmark...")
 
-	vim.ui.select(options, { prompt = "Select bookmark to move or create new:" }, function(selected)
-		if not selected then
-			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-		elseif selected == "Create new bookmark..." then
-			vim.ui.input({ prompt = "New bookmark name: " }, function(name)
-				if not name then
-					vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
-				elseif name == "" then
-					vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
-				else
-					move_bookmark_to_change(name, change_id)
-				end
-			end)
-		else
-			move_bookmark_to_change(selected, change_id)
-		end
-	end)
+	local show_local = true
+	local function display_bookmarks()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local prompt = show_local and "Select local bookmark (T to toggle remote):" or "Select remote bookmark (T to toggle local):"
+		table.insert(options, "Create new bookmark...")
+		table.insert(options, "Toggle Local/Remote")
+		
+		vim.ui.select(options, { prompt = prompt }, function(selected)
+			if not selected then
+				vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+			elseif selected == "Toggle Local/Remote" then
+				show_local = not show_local
+				display_bookmarks()
+			elseif selected == "Create new bookmark..." then
+				vim.ui.input({ prompt = "New bookmark name: " }, function(name)
+					if not name then
+						vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
+					elseif name == "" then
+						vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
+					else
+						move_bookmark_to_change(name, change_id)
+					end
+				end)
+			else
+				move_bookmark_to_change(bookmark_map[selected] or selected, change_id)
+			end
+		end)
+	end
+
+	display_bookmarks()
 end
 
 function Commands.edit_change()
