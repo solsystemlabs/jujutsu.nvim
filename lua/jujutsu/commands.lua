@@ -37,7 +37,6 @@ local function get_bookmark_names()
 		return nil
 	end
 	local local_names = {}
-	local remote_names = {}
 	local bookmark_map = {}
 	local current_bookmark = nil
 	local skip_next = false
@@ -61,18 +60,29 @@ local function get_bookmark_names()
 			else
 				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
-		elseif current_bookmark and line:match("^%s+@") then
-			-- This line contains remote tracking info for the current bookmark (indented)
-			local remote_info = line:match("^%s+([^%(]+)") or ""
-			local remote_part = remote_info:match("@[^%s%(]+") or ""
-			if remote_part ~= "" then
-				local display_name = "  " .. remote_part
-				table.insert(remote_names, display_name)
-				bookmark_map[display_name] = current_bookmark
-			end
 		end
 		::continue::
 	end
+	
+	-- Fetch remote branches
+	local remote_output = vim.fn.systemlist({ "jj", "branch", "list", "--all" })
+	if vim.v.shell_error ~= 0 then
+		vim.api.nvim_echo({ { "Error getting remote branch list.", "ErrorMsg" } }, true, {})
+		return local_names, {}, bookmark_map
+	end
+	
+	local remote_names = {}
+	for _, line in ipairs(remote_output) do
+		if line:match("@origin") then
+			local branch_name = line:match("^([^%s%(]+)")
+			if branch_name then
+				local display_name = branch_name .. "@origin"
+				table.insert(remote_names, display_name)
+				bookmark_map[display_name] = branch_name
+			end
+		end
+	end
+	
 	return local_names, remote_names, bookmark_map
 end
 
@@ -109,7 +119,19 @@ local function select_bookmark(prompt, callback)
 		end, opts)
 	end
 
-	show_selector()
+	-- Ensure remote branches are fetched
+	vim.notify("Fetching remote branches...", vim.log.levels.INFO, { title = "Jujutsu" })
+	vim.system({"jj", "git", "fetch"}, { text = true }, function(obj)
+		if obj.code == 0 then
+			vim.notify("Remote branches fetched.", vim.log.levels.INFO, { title = "Jujutsu" })
+			-- Refresh bookmark names after fetch
+			local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+			show_selector()
+		else
+			vim.notify("Error fetching remote branches: " .. (obj.stderr or ""), vim.log.levels.ERROR, { title = "Jujutsu Error" })
+			show_selector()
+		end
+	end)
 end
 
 -- Execute a jj command and refresh log if necessary
