@@ -55,8 +55,7 @@ function Status.show_status()
 		col = col,
 		row = row,
 		style = "minimal",
-		border = "rounded",
-		winfixwidth = true -- Prevent automatic resizing
+		border = "rounded"
 	}
 
 	M_ref.status_win = vim.api.nvim_open_win(buf, true, win_opts)
