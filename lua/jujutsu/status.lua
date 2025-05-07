@@ -27,6 +27,13 @@ function Status.show_status()
 		return
 	end
 
+	-- Check if a buffer with the name "JJ Status" already exists
+	local existing_buf = vim.fn.bufnr("JJ Status")
+	if existing_buf ~= -1 then
+		-- If it exists, delete it to avoid conflicts
+		vim.api.nvim_buf_delete(existing_buf, { force = true })
+	end
+
 	-- Create a new scratch buffer
 	local buf = vim.api.nvim_create_buf(false, true)
 	M_ref.status_buf = buf
@@ -93,6 +100,12 @@ function Status.refresh_status()
 	if M_ref.status_win and vim.api.nvim_win_is_valid(M_ref.status_win) then
 		-- Remember the window ID
 		local win_id = M_ref.status_win
+		-- Check if a buffer with the name "JJ Status" already exists
+		local existing_buf = vim.fn.bufnr("JJ Status")
+		if existing_buf ~= -1 and existing_buf ~= M_ref.status_buf then
+			-- If it exists and is not the current status buffer, delete it
+			vim.api.nvim_buf_delete(existing_buf, { force = true })
+		end
 		-- Create a new buffer
 		local new_buf = vim.api.nvim_create_buf(false, true)
 		-- Set buffer name (optional, but good practice)
