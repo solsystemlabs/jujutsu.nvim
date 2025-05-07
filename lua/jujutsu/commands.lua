@@ -45,7 +45,7 @@ local function get_bookmark_names()
 			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
 			if type(cleaned_name) == "string" then
 				table.insert(local_names, cleaned_name)
-				bookmark_map[cleaned_name] = cleaned_name
+				bookmark_map[cleaned_name] = { name = cleaned_name, is_remote = false }
 			else
 				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
 			end
@@ -68,7 +68,7 @@ local function get_bookmark_names()
 			if branch_name then
 				current_bookmark = branch_name
 				table.insert(remote_names, branch_name)
-				bookmark_map[branch_name] = branch_name
+				bookmark_map[branch_name] = { name = branch_name, is_remote = true }
 			end
 		elseif current_bookmark and line:match("^%s+@origin:") then
 			-- Additional info for the current bookmark
@@ -102,8 +102,12 @@ local function select_bookmark(prompt, callback)
 					vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
 					return
 				else
-					-- Use the mapped value which has @origin stripped for remote bookmarks
-					callback(bookmark_map[choice])
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					if bookmark_info.is_remote then
+						bookmark_name = bookmark_name .. "@origin"
+					end
+					callback(bookmark_name)
 				end
 			end)
 
@@ -665,25 +669,45 @@ function Commands.create_bookmark()
 end
 
 function Commands.delete_bookmark()
-	local bookmark_names = get_bookmark_names()
-	if not bookmark_names or #bookmark_names == 0 then
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks or (#local_bookmarks == 0 and #remote_bookmarks == 0) then
 		vim.api.nvim_echo({ { "No bookmarks found to delete.", "Normal" } }, false, {})
 		return
 	end
-	vim.ui.select(bookmark_names, { prompt = "Select bookmark to delete:" }, function(selected_name)
-		if selected_name then
-			vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
-				if choice == "Yes" then
-					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
-						true)
+
+	local show_local = true
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined, { prompt = "Select bookmark to delete" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark deletion cancelled", "Normal" } }, false, {})
+					return
 				else
-					vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. bookmark_name .. "'?" }, function(confirm)
+						if confirm == "Yes" then
+							execute_jj_command({ "jj", "bookmark", "delete", bookmark_name }, "Bookmark '" .. bookmark_name .. "' deleted.", true)
+						else
+							vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+						end
+					end)
 				end
 			end)
-		else
-			vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
-		end
-	end)
+
+		-- Set up a keymap for toggling between local and remote
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
+	end
+
+	show_selector()
 end
 
 function Commands.move_bookmark()
@@ -698,20 +722,13 @@ function Commands.move_bookmark()
 		return
 	end
 
-	local show_local = true
 	select_bookmark("Select bookmark to move:", function(selected)
 		if not selected then
 			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-		elseif selected == "Create new bookmark..." then
-			vim.ui.input({ prompt = "New bookmark name: " }, function(name)
-				if not name or name == "" then
-					vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
-				else
-					move_bookmark_to_change(name, change_id)
-				end
-			end)
 		else
-			move_bookmark_to_change(selected, change_id)
+			-- Extract the base name without @origin for display purposes
+			local base_name = selected:match("^(.-)@origin$") or selected
+			move_bookmark_to_change(base_name, change_id)
 		end
 	end)
 end
