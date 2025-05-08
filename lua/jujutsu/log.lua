@@ -683,6 +683,8 @@ function Log.toggle_log_window()
 	
 	-- Disable cursor wrapping in the log window
 	vim.api.nvim_win_set_option(M_ref.log_win, 'wrap', false)
+	-- Prevent cursor from wrapping to the next line
+	vim.api.nvim_win_set_option(M_ref.log_win, 'wrapscan', false)
 	-- Prevent automatic resizing
 	vim.api.nvim_win_set_option(M_ref.log_win, 'winfixwidth', true)
 
