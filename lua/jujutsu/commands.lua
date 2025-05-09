@@ -162,7 +162,7 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 					if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 						M_ref.refresh_log()
 					end
-				end, 100)
+				end, 200)
 			end
 		else
 			local error_text = format_error_output(error_output, code)
