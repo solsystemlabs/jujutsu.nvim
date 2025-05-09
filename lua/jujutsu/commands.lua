@@ -624,15 +624,15 @@ function Commands.git_fetch()
 end
 
 -- Bookmark management functions
-local function move_bookmark_to_change(name, change_id)
-	local cmd_parts = { "jj", "bookmark", "set", name, "-r", change_id }
+local function move_bookmark_to_change(name, change_id, is_new_bookmark)
+	local cmd_parts = { "jj", "bookmark", is_new_bookmark and "create" or "set", name, "-r", change_id }
 	local cmd_str = table.concat(cmd_parts, " ")
 	local output = vim.fn.system(cmd_str .. " 2>&1")
 	if vim.v.shell_error == 0 then
-		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {})
+		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' " .. (is_new_bookmark and "created" or "set") .. " to " .. change_id, "Normal" } }, false, {})
 		if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
 	else
-		if output and output:lower():find("refusing to move bookmark backwards", 1, true) then
+		if not is_new_bookmark and output and output:lower():find("refusing to move bookmark backwards", 1, true) then
 			vim.ui.select({ "Yes", "No" }, { prompt = "Allow moving bookmark '" .. name .. "' backward?" }, function(choice)
 				if choice == "Yes" then
 					local cmd_parts_alt = { "jj", "bookmark", "set", "--allow-backwards", name, "-r", change_id }
@@ -722,14 +722,32 @@ function Commands.move_bookmark()
 		return
 	end
 
-	select_bookmark("Select bookmark to move:", function(selected)
-		if not selected then
+	vim.ui.input({ prompt = "Bookmark name to set/move: " }, function(input)
+		if not input then
 			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-		else
-			-- Extract the base name without @origin for display purposes
-			local base_name = selected:match("^(.-)@origin$") or selected
-			move_bookmark_to_change(base_name, change_id)
+			return
+		elseif input == "" then
+			vim.api.nvim_echo({ { "Bookmark name cannot be empty.", "WarningMsg" } }, false, {})
+			return
 		end
+		
+		local is_new_bookmark = true
+		for _, bookmark in ipairs(local_bookmarks) do
+			if bookmark == input then
+				is_new_bookmark = false
+				break
+			end
+		end
+		if is_new_bookmark then
+			for _, bookmark in ipairs(remote_bookmarks) do
+				if bookmark == input or bookmark:match("^(.-)@origin$") == input then
+					is_new_bookmark = false
+					break
+				end
+			end
+		end
+		
+		move_bookmark_to_change(input, change_id, is_new_bookmark)
 	end)
 end
 
