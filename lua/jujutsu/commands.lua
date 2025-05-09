@@ -722,33 +722,46 @@ function Commands.move_bookmark()
 		return
 	end
 
-	vim.ui.input({ prompt = "Bookmark name to set/move: " }, function(input)
-		if not input then
-			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-			return
-		elseif input == "" then
-			vim.api.nvim_echo({ { "Bookmark name cannot be empty.", "WarningMsg" } }, false, {})
-			return
-		end
-		
-		local is_new_bookmark = true
-		for _, bookmark in ipairs(local_bookmarks) do
-			if bookmark == input then
-				is_new_bookmark = false
-				break
-			end
-		end
-		if is_new_bookmark then
-			for _, bookmark in ipairs(remote_bookmarks) do
-				if bookmark == input or bookmark:match("^(.-)@origin$") == input then
-					is_new_bookmark = false
-					break
+	local show_local = true
+
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Enter new bookmark name")
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined, { prompt = "Select bookmark to move" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]:" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+					return
+				elseif choice == "Enter new bookmark name" then
+					vim.ui.input({ prompt = "New bookmark name: " }, function(input)
+						if not input then
+							vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+							return
+						elseif input == "" then
+							vim.api.nvim_echo({ { "Bookmark name cannot be empty.", "WarningMsg" } }, false, {})
+							return
+						end
+						move_bookmark_to_change(input, change_id, true)
+					end)
+				else
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					move_bookmark_to_change(bookmark_name, change_id, false)
 				end
-			end
-		end
-		
-		move_bookmark_to_change(input, change_id, is_new_bookmark)
-	end)
+			end)
+
+		-- Set up a keymap for toggling between local and remote
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
+	end
+
+	show_selector()
 end
 
 function Commands.edit_change()
