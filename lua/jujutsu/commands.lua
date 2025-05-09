@@ -309,6 +309,10 @@ local function select_from_log_window(callback, prompt)
 				vim.api.nvim_set_current_win(current_win)
 			end
 			
+			-- Restore log window keymaps
+			local log_module = require("jujutsu.log")
+			log_module.refresh_log_buffer()
+			
 			if selected_id then
 				callback(selected_id)
 			else
@@ -327,6 +331,10 @@ local function select_from_log_window(callback, prompt)
 			if vim.api.nvim_win_is_valid(current_win) then
 				vim.api.nvim_set_current_win(current_win)
 			end
+			
+			-- Restore log window keymaps
+			local log_module = require("jujutsu.log")
+			log_module.refresh_log_buffer()
 			
 			vim.api.nvim_echo({ { "Selection cancelled", "Normal" } }, false, {})
 			callback(nil)
