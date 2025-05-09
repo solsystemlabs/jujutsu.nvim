@@ -250,28 +250,108 @@ end
 -- Helper function to select a change from log window
 local function select_from_log_window(callback, prompt)
 	local log_module = require("jujutsu.log")
-	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
-		local current_win = vim.api.nvim_get_current_win()
-		log_module.toggle_log_window()
-		vim.api.nvim_echo({
-			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
-		}, true, {})
-		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-			setup_log_selection_mapping(buf, current_win, callback)
+	local current_win = vim.api.nvim_get_current_win()
+	
+	-- Create a persistent dialog buffer
+	local buf_dialog = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf_dialog, "JJ Selection Prompt")
+	vim.bo[buf_dialog].buftype = "nofile"
+	vim.bo[buf_dialog].bufhidden = "wipe"
+	vim.bo[buf_dialog].swapfile = false
+	
+	local width = math.floor(vim.o.columns * 0.5)
+	local height = 3
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+	
+	local win_dialog = vim.api.nvim_open_win(buf_dialog, false, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded"
+	})
+	
+	-- Set the prompt text
+	local prompt_text = prompt or "Select a change from log window, then press "
+	vim.api.nvim_buf_set_lines(buf_dialog, 0, -1, false, {
+		prompt_text,
+		"ENTER to confirm",
+		"Press q or ESC to cancel"
+	})
+	
+	-- Highlight ENTER as special
+	vim.cmd('highlight JujutsuSpecial guifg=#00ff00')
+	vim.api.nvim_buf_add_highlight(buf_dialog, vim.api.nvim_create_namespace("jujutsu"), "JujutsuSpecial", 1, 0, 5)
+	
+	vim.bo[buf_dialog].modifiable = false
+	vim.bo[buf_dialog].readonly = true
+	
+	local function close_dialog()
+		if vim.api.nvim_win_is_valid(win_dialog) then
+			vim.api.nvim_win_close(win_dialog, true)
 		end
-		return
+	end
+	
+	local function setup_selection(buf_log)
+		local function on_select()
+			local line = vim.api.nvim_get_current_line()
+			local selected_id = Utils.extract_change_id(line)
+			vim.keymap.del("n", "<CR>", { buffer = buf_log })
+			vim.keymap.del("n", "q", { buffer = buf_log })
+			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
+			
+			close_dialog()
+			
+			if vim.api.nvim_win_is_valid(current_win) then
+				vim.api.nvim_set_current_win(current_win)
+			end
+			
+			if selected_id then
+				callback(selected_id)
+			else
+				vim.api.nvim_echo({ { "No valid change ID found on that line", "WarningMsg" } }, false, {})
+				callback(nil)
+			end
+		end
+		
+		local function on_cancel()
+			vim.keymap.del("n", "<CR>", { buffer = buf_log })
+			vim.keymap.del("n", "q", { buffer = buf_log })
+			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
+			
+			close_dialog()
+			
+			if vim.api.nvim_win_is_valid(current_win) then
+				vim.api.nvim_set_current_win(current_win)
+			end
+			
+			vim.api.nvim_echo({ { "Selection cancelled", "Normal" } }, false, {})
+			callback(nil)
+		end
+		
+		vim.keymap.set("n", "<CR>", on_select, { noremap = true, silent = true, buffer = buf_log })
+		vim.keymap.set("n", "q", on_cancel, { noremap = true, silent = true, buffer = buf_log })
+		vim.keymap.set("n", "<Esc>", on_cancel, { noremap = true, silent = true, buffer = buf_log })
+	end
+	
+	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
+		log_module.toggle_log_window()
+		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+			local buf_log = vim.api.nvim_win_get_buf(M_ref.log_win)
+			setup_selection(buf_log)
+			vim.api.nvim_set_current_win(M_ref.log_win)
+		else
+			close_dialog()
+			vim.api.nvim_echo({ { "Failed to open log window", "ErrorMsg" } }, false, {})
+			callback(nil)
+		end
 	else
-		vim.api.nvim_echo({
-			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
-		}, true, {})
-		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-		local current_win = vim.api.nvim_get_current_win()
-		setup_log_selection_mapping(buf, current_win, callback)
+		local buf_log = vim.api.nvim_win_get_buf(M_ref.log_win)
+		setup_selection(buf_log)
+		vim.api.nvim_set_current_win(M_ref.log_win)
 	end
 end
 
