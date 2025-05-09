@@ -625,11 +625,11 @@ end
 
 -- Bookmark management functions
 local function move_bookmark_to_change(name, change_id, is_new_bookmark)
-	local cmd_parts = { "jj", "bookmark", is_new_bookmark and "create" or "set", name, "-r", change_id }
+	local cmd_parts = { "jj", "bookmark", "set", name, "-r", change_id }
 	local cmd_str = table.concat(cmd_parts, " ")
 	local output = vim.fn.system(cmd_str .. " 2>&1")
 	if vim.v.shell_error == 0 then
-		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' " .. (is_new_bookmark and "created" or "set") .. " to " .. change_id, "Normal" } }, false, {})
+		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {})
 		if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
 	else
 		if not is_new_bookmark and output and output:lower():find("refusing to move bookmark backwards", 1, true) then
@@ -727,7 +727,7 @@ function Commands.move_bookmark()
 	local function show_selector()
 		local options = show_local and local_bookmarks or remote_bookmarks
 		local combined = vim.deepcopy(options)
-		table.insert(combined, "Enter new bookmark name")
+		table.insert(combined, "Set bookmark name")
 		table.insert(combined, "Cancel")
 
 		vim.ui.select(combined, { prompt = "Select bookmark to move" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]:" },
@@ -735,8 +735,8 @@ function Commands.move_bookmark()
 				if not choice or choice == "Cancel" then
 					vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
 					return
-				elseif choice == "Enter new bookmark name" then
-					vim.ui.input({ prompt = "New bookmark name: " }, function(input)
+				elseif choice == "Set bookmark name" then
+					vim.ui.input({ prompt = "Bookmark name: " }, function(input)
 						if not input then
 							vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
 							return
