@@ -1169,7 +1169,7 @@ function Commands.squash_change()
 		elseif choice == "Squash into specific revision" then
 			select_from_log_window(function(dest_id)
 				if dest_id then
-					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
+					local cmd_parts = { "jj", "squash", "-r", change_id, "-d", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
 					execute_jj_command(cmd_parts, success_msg, true)
 				end
@@ -1227,7 +1227,7 @@ function Commands.squash_workflow()
 				end
 
 				local function handle_destination_selection(dest_id)
-					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
+					local cmd_parts = { "jj", "squash", "-r", change_id, "-d", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
 
 					vim.ui.select({
