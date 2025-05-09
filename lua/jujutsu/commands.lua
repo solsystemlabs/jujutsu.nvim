@@ -1200,6 +1200,7 @@ function Commands.squash_workflow()
 			vim.ui.select({
 				"Non-interactively",
 				"Interactively",
+				"Use destination message and keep source (non-interactive)",
 				"Cancel"
 			}, { prompt = "Select mode for squashing into parent:" }, function(mode)
 				if mode == "Cancel" or not mode then
@@ -1212,6 +1213,10 @@ function Commands.squash_workflow()
 				if mode == "Interactively" then
 					table.insert(cmd_parts, "-i")
 					success_msg = success_msg .. " interactively"
+				elseif mode == "Use destination message and keep source (non-interactive)" then
+					table.insert(cmd_parts, "-u")
+					table.insert(cmd_parts, "-k")
+					success_msg = success_msg .. " using destination message, source kept"
 				end
 				execute_jj_command(cmd_parts, success_msg, true)
 			end)
@@ -1233,6 +1238,7 @@ function Commands.squash_workflow()
 					vim.ui.select({
 						"Non-interactively",
 						"Interactively",
+						"Use destination message and keep source (non-interactive)",
 						"Cancel"
 					}, { prompt = "Select mode for squashing:" }, function(mode)
 						if mode == "Cancel" or not mode then
@@ -1243,6 +1249,10 @@ function Commands.squash_workflow()
 						if mode == "Interactively" then
 							table.insert(cmd_parts, "-i")
 							success_msg = success_msg .. " interactively"
+						elseif mode == "Use destination message and keep source (non-interactive)" then
+							table.insert(cmd_parts, "-u")
+							table.insert(cmd_parts, "-k")
+							success_msg = success_msg .. " using destination message, source kept"
 						end
 						execute_jj_command(cmd_parts, success_msg, true)
 					end)
