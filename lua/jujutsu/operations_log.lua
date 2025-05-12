@@ -144,7 +144,7 @@ function OperationsLog.show_operations_log()
       end
       vim.api.nvim_win_set_buf(current_win, M_ref.operations_log_buf)
       vim.bo[M_ref.operations_log_buf].modifiable = false
-      vim  vim.bo[M_ref.operations_log_buf].readonly = true
+      vim.bo[M_ref.operations_log_buf].readonly = true
       -- Set cursor to the line with the current operation (@ symbol)
       local line_count = vim.api.nvim_buf_line_count(M_ref.operations_log_buf)
       for i = 1, line_count do
