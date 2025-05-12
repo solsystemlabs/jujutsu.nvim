@@ -283,6 +283,16 @@ function Log.refresh_log_buffer()
 			vim.bo[current_log_buf].modifiable = false
 			vim.bo[current_log_buf].readonly = true
 			setup_log_buffer_keymaps(current_log_buf)
+			
+			-- Set cursor to the line with the current change (@ symbol)
+			local line_count = vim.api.nvim_buf_line_count(current_log_buf)
+			for i = 1, line_count do
+				local line = vim.api.nvim_buf_get_lines(current_log_buf, i - 1, i, false)[1]
+				if line and line:find("@") then
+					vim.api.nvim_win_set_cursor(win_id, {i, 0})
+					break
+				end
+			end
 		end
 	})
 end
