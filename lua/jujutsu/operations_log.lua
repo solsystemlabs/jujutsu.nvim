@@ -146,14 +146,17 @@ function OperationsLog.show_operations_log()
       vim.bo[M_ref.operations_log_buf].modifiable = false
       vim.bo[M_ref.operations_log_buf].readonly = true
       -- Set cursor to the line with the current operation (@ symbol)
-      local line_count = vim.api.nvim_buf_line_count(M_ref.operations_log_buf)
-      for i = 1, line_count do
-        local line = vim.api.nvim_buf_get_lines(M_ref.operations_log_buf, i - 1, i, false)[1]
-        if line and line:find("@") then
-          vim.api.nvim_win_set_cursor(current_win, {i, 0})
-          break
+      vim.defer_fn(function()
+        if not vim.api.nvim_win_is_valid(current_win) then return end
+        local line_count = vim.api.nvim_buf_line_count(M_ref.operations_log_buf)
+        for i = 1, line_count do
+          local line = vim.api.nvim_buf_get_lines(M_ref.operations_log_buf, i - 1, i, false)[1]
+          if line and line:find("@") then
+            vim.api.nvim_win_set_cursor(current_win, {i, 0})
+            break
+          end
         end
-      end
+      end, 50) -- Delay by 50ms to ensure terminal output is rendered
     end
   })
 end
