@@ -515,6 +515,78 @@ function Commands.new_change()
 	end)
 end
 
+-- Function to duplicate a change with different placement options
+function Commands.duplicate_change()
+	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and
+			Utils.extract_change_id(vim.api.nvim_get_current_line()) or nil
+	if not source_id then
+		source_id = "@"
+		vim.api.nvim_echo({ { "Using current change for duplicate.", "Normal" } }, false, {})
+	end
+
+	local function execute_duplicate_command(dest_id, position_flag)
+		local cmd_parts = { "jj", "duplicate", source_id }
+		if position_flag == "--insert-before" then
+			table.insert(cmd_parts, "--before")
+			table.insert(cmd_parts, dest_id)
+		elseif position_flag == "--insert-after" then
+			table.insert(cmd_parts, "--after")
+			table.insert(cmd_parts, dest_id)
+		else
+			table.insert(cmd_parts, "-d")
+			table.insert(cmd_parts, dest_id)
+		end
+		local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
+		execute_jj_command(cmd_parts, "Duplicated " .. source_id .. " " .. position_text .. " " .. dest_id, true)
+	end
+
+	vim.ui.select({
+		"Select change from log window",
+		"Select bookmark",
+		"Cancel"
+	}, { prompt = "Select destination for duplicate:" }, function(dest_choice)
+		if dest_choice == "Cancel" or not dest_choice then
+			vim.api.nvim_echo({ { "Duplicate destination selection cancelled", "Normal" } }, false, {})
+			return
+		end
+
+		local function handle_destination_selection(dest_id)
+			vim.ui.select({
+				"Place onto destination",
+				"Insert before destination",
+				"Insert after destination",
+				"Cancel"
+			}, { prompt = "Select duplicate position for " .. dest_id .. ":" }, function(position_choice)
+				if position_choice == "Cancel" or not position_choice then
+					vim.api.nvim_echo({ { "Duplicate position selection cancelled", "Normal" } }, false, {})
+					return
+				end
+
+				local position_flag = position_choice == "Insert before destination" and "--insert-before" or
+						position_choice == "Insert after destination" and "--insert-after" or nil
+				execute_duplicate_command(dest_id, position_flag)
+			end)
+		end
+
+		if dest_choice == "Select change from log window" then
+			select_from_log_window(function(dest_id)
+				if dest_id then handle_destination_selection(dest_id) end
+			end, "Select destination change for duplicate, then press ")
+		else
+			local bookmark_names, _, bookmark_map = get_bookmark_names()
+			if not bookmark_names or #bookmark_names == 0 then
+				vim.api.nvim_echo({ { "No bookmarks found to duplicate onto.", "WarningMsg" } }, false, {})
+				return
+			end
+			select_bookmark("Select bookmark to duplicate onto:", function(bookmark)
+				if bookmark then
+					handle_destination_selection(bookmark)
+				end
+			end)
+		end
+	end)
+end
+
 -- Function to rebase changes with support for different flag variations
 function Commands.rebase_change()
 	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and
