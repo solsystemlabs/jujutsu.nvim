@@ -34,6 +34,7 @@ local log_keymaps_info = {
 	{ key = "n",  desc = "Create new change (jj new)" },
 	{ key = "u",  desc = "Undo last operation (jj undo)" },
 	{ group = "Change Modification" },
+	{ key = "du", desc = "[DU]plicate change" },
 	{ key = "rb", desc = "[R]e[B]ase change" },
 	{ key = "rm", desc = "[R]ebase onto [M]aster" },
 	{ key = "s",  desc = "[S]plit change" },
