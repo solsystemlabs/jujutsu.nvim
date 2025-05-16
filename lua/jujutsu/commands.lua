@@ -472,6 +472,19 @@ function Commands.new_change()
 	end)
 end
 
+function Commands.restore_change()
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to restore the current change?" },
+		function(choice)
+			if choice == "Yes" then
+				vim.api.nvim_echo({ { "Restoring current change.", "Normal" } }, false, {})
+
+				execute_jj_command({ "jj", "restore" }, "Restored current change", true)
+			else
+				vim.api.nvim_echo({ { "Restore cancelled", "Normal" } }, false, {})
+			end
+		end)
+end
+
 -- Function to duplicate a change with different placement options
 function Commands.duplicate_change()
 	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and
