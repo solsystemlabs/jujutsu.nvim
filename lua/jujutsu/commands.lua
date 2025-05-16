@@ -206,64 +206,23 @@ local function format_changes_for_selection(changes)
 	return options, change_ids
 end
 
--- Helper function to select a change from a list
-local function select_change(callback, limit)
-	limit = limit or 15
-	local cmd = "jj log -n " .. limit .. " --no-graph"
-	local changes = vim.fn.systemlist(cmd)
-	if vim.v.shell_error ~= 0 or #changes == 0 then
-		vim.api.nvim_echo({ { "Failed to get change list", "ErrorMsg" } }, true, {})
-		return
-	end
-
-	local options, change_ids = format_changes_for_selection(changes)
-	vim.ui.select(options, { prompt = "Select target change:" }, function(_, idx)
-		if idx and change_ids[idx] then
-			callback(change_ids[idx])
-		else
-			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
-		end
-	end)
-end
-
--- Helper function to setup log window selection mapping
-local function setup_log_selection_mapping(buf, current_win, callback)
-	local opts = { noremap = true, silent = true, buffer = buf }
-	vim.keymap.set("n", "<CR>", function()
-		local line = vim.api.nvim_get_current_line()
-		local selected_id = Utils.extract_change_id(line)
-		vim.keymap.del("n", "<CR>", { buffer = buf })
-
-		if vim.api.nvim_win_is_valid(current_win) then
-			vim.api.nvim_set_current_win(current_win)
-		end
-
-		if selected_id then
-			callback(selected_id)
-		else
-			vim.api.nvim_echo({ { "No valid change ID found on that line", "WarningMsg" } }, false, {})
-			callback(nil)
-		end
-	end, opts)
-end
-
 -- Helper function to select a change from log window
 local function select_from_log_window(callback, prompt)
 	local log_module = require("jujutsu.log")
 	local current_win = vim.api.nvim_get_current_win()
-	
+
 	-- Create a persistent dialog buffer
 	local buf_dialog = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf_dialog, "JJ Selection Prompt")
 	vim.bo[buf_dialog].buftype = "nofile"
 	vim.bo[buf_dialog].bufhidden = "wipe"
 	vim.bo[buf_dialog].swapfile = false
-	
+
 	local width = math.floor(vim.o.columns * 0.5)
 	local height = 3
 	local row = math.floor((vim.o.lines - height) / 2)
 	local col = math.floor((vim.o.columns - width) / 2)
-	
+
 	local win_dialog = vim.api.nvim_open_win(buf_dialog, false, {
 		relative = "editor",
 		width = width,
@@ -273,7 +232,7 @@ local function select_from_log_window(callback, prompt)
 		style = "minimal",
 		border = "rounded"
 	})
-	
+
 	-- Set the prompt text
 	local prompt_text = prompt or "Select a change from log window, then press "
 	vim.api.nvim_buf_set_lines(buf_dialog, 0, -1, false, {
@@ -281,20 +240,20 @@ local function select_from_log_window(callback, prompt)
 		"ENTER to confirm",
 		"Press q or ESC to cancel"
 	})
-	
+
 	-- Highlight ENTER as special
 	vim.cmd('highlight JujutsuSpecial guifg=#00ff00')
 	vim.api.nvim_buf_add_highlight(buf_dialog, vim.api.nvim_create_namespace("jujutsu"), "JujutsuSpecial", 1, 0, 5)
-	
+
 	vim.bo[buf_dialog].modifiable = false
 	vim.bo[buf_dialog].readonly = true
-	
+
 	local function close_dialog()
 		if vim.api.nvim_win_is_valid(win_dialog) then
 			vim.api.nvim_win_close(win_dialog, true)
 		end
 	end
-	
+
 	local function setup_selection(buf_log)
 		local function on_select()
 			local line = vim.api.nvim_get_current_line()
@@ -302,17 +261,16 @@ local function select_from_log_window(callback, prompt)
 			vim.keymap.del("n", "<CR>", { buffer = buf_log })
 			vim.keymap.del("n", "q", { buffer = buf_log })
 			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
-			
+
 			close_dialog()
-			
+
 			if vim.api.nvim_win_is_valid(current_win) then
 				vim.api.nvim_set_current_win(current_win)
 			end
-			
+
 			-- Restore log window keymaps
-			local log_module = require("jujutsu.log")
 			log_module.refresh_log_buffer()
-			
+
 			if selected_id then
 				callback(selected_id)
 			else
@@ -320,31 +278,30 @@ local function select_from_log_window(callback, prompt)
 				callback(nil)
 			end
 		end
-		
+
 		local function on_cancel()
 			vim.keymap.del("n", "<CR>", { buffer = buf_log })
 			vim.keymap.del("n", "q", { buffer = buf_log })
 			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
-			
+
 			close_dialog()
-			
+
 			if vim.api.nvim_win_is_valid(current_win) then
 				vim.api.nvim_set_current_win(current_win)
 			end
-			
+
 			-- Restore log window keymaps
-			local log_module = require("jujutsu.log")
 			log_module.refresh_log_buffer()
-			
+
 			vim.api.nvim_echo({ { "Selection cancelled", "Normal" } }, false, {})
 			callback(nil)
 		end
-		
+
 		vim.keymap.set("n", "<CR>", on_select, { noremap = true, silent = true, buffer = buf_log })
 		vim.keymap.set("n", "q", on_cancel, { noremap = true, silent = true, buffer = buf_log })
 		vim.keymap.set("n", "<Esc>", on_cancel, { noremap = true, silent = true, buffer = buf_log })
 	end
-	
+
 	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
 		log_module.toggle_log_window()
 		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
@@ -573,7 +530,7 @@ function Commands.duplicate_change()
 				if dest_id then handle_destination_selection(dest_id) end
 			end, "Select destination change for duplicate, then press ")
 		else
-			local bookmark_names, _, bookmark_map = get_bookmark_names()
+			local bookmark_names, _ = get_bookmark_names()
 			if not bookmark_names or #bookmark_names == 0 then
 				vim.api.nvim_echo({ { "No bookmarks found to duplicate onto.", "WarningMsg" } }, false, {})
 				return
@@ -663,7 +620,7 @@ function Commands.rebase_change()
 					if dest_id then handle_destination_selection(dest_id) end
 				end, "Select destination change for rebase, then press ")
 			else
-				local bookmark_names, bookmark_map = get_bookmark_names()
+				local bookmark_names = get_bookmark_names()
 				if not bookmark_names or #bookmark_names == 0 then
 					vim.api.nvim_echo({ { "No bookmarks found to rebase onto.", "WarningMsg" } }, false, {})
 					return
@@ -841,7 +798,8 @@ function Commands.delete_bookmark()
 		local combined = vim.deepcopy(options)
 		table.insert(combined, "Cancel")
 
-		vim.ui.select(combined, { prompt = "Select bookmark to delete" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
+		vim.ui.select(combined,
+			{ prompt = "Select bookmark to delete" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
 			function(choice)
 				if not choice or choice == "Cancel" then
 					vim.api.nvim_echo({ { "Bookmark deletion cancelled", "Normal" } }, false, {})
@@ -851,7 +809,8 @@ function Commands.delete_bookmark()
 					local bookmark_name = bookmark_info.name
 					vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. bookmark_name .. "'?" }, function(confirm)
 						if confirm == "Yes" then
-							execute_jj_command({ "jj", "bookmark", "delete", bookmark_name }, "Bookmark '" .. bookmark_name .. "' deleted.", true)
+							execute_jj_command({ "jj", "bookmark", "delete", bookmark_name },
+								"Bookmark '" .. bookmark_name .. "' deleted.", true)
 						else
 							vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
 						end
@@ -890,7 +849,8 @@ function Commands.move_bookmark()
 		table.insert(combined, "Set bookmark name")
 		table.insert(combined, "Cancel")
 
-		vim.ui.select(combined, { prompt = "Select bookmark to move" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]:" },
+		vim.ui.select(combined,
+			{ prompt = "Select bookmark to move" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]:" },
 			function(choice)
 				if not choice or choice == "Cancel" then
 					vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
@@ -1335,7 +1295,7 @@ function Commands.squash_workflow()
 						if dest_id then handle_destination_selection(dest_id) end
 					end, "Select destination change for squash, then press ")
 				else
-					local bookmark_names, _, bookmark_map = get_bookmark_names()
+					local bookmark_names, _ = get_bookmark_names()
 					if not bookmark_names or #bookmark_names == 0 then
 						vim.api.nvim_echo({ { "No bookmarks found to squash into.", "WarningMsg" } }, false, {})
 						return
