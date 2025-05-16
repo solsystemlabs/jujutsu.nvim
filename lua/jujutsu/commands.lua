@@ -118,25 +118,6 @@ local function select_bookmark(prompt, callback)
 			show_selector()
 		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
 	end
-
-	-- Ensure remote branches are fetched
-	vim.notify("Fetching remote branches...", vim.log.levels.INFO, { title = "Jujutsu" })
-	vim.system({ "jj", "git", "fetch" }, { text = true }, function(obj)
-		if obj.code == 0 then
-			vim.notify("Remote branches fetched.", vim.log.levels.INFO, { title = "Jujutsu" })
-			-- Defer the refresh of bookmark names to avoid fast event context issues
-			vim.defer_fn(function()
-				local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
-				show_selector()
-			end, 0)
-		else
-			vim.notify("Error fetching remote branches: " .. (obj.stderr or ""), vim.log.levels.ERROR,
-				{ title = "Jujutsu Error" })
-			vim.defer_fn(function()
-				show_selector()
-			end, 0)
-		end
-	end)
 end
 
 -- Execute a jj command and refresh log if necessary
