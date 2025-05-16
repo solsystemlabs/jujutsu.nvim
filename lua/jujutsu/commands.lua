@@ -543,7 +543,7 @@ function Commands.duplicate_change()
 				if dest_id then handle_destination_selection(dest_id) end
 			end, "Select destination change for duplicate, then press ")
 		else
-			local bookmark_names, _ = get_bookmark_names()
+			local bookmark_names = get_bookmark_names()
 			if not bookmark_names or #bookmark_names == 0 then
 				vim.api.nvim_echo({ { "No bookmarks found to duplicate onto.", "WarningMsg" } }, false, {})
 				return
