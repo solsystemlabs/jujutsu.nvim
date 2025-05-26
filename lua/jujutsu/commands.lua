@@ -884,7 +884,7 @@ function Commands.edit_change()
 		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
 		return
 	end
-	execute_jj_command({ "jj", "edit", change_id }, "Applied edit to change " .. change_id, true)
+	execute_jj_command({ "jj", "edit", change_id }, "Now editing " .. change_id, true)
 end
 
 function Commands.abandon_change()
