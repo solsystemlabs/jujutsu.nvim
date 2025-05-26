@@ -1188,16 +1188,65 @@ function Commands.squash_change()
 			return
 		end
 
+		local function execute_squash(cmd_parts, success_msg)
+			local cmd_str = table.concat(cmd_parts, " ")
+			vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+			local function handle_error(output, error_code)
+				local error_text = format_error_output(output, error_code)
+				if error_text:find("immutable", 1, true) then
+					vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+						if confirm == "Yes" then
+							table.insert(cmd_parts, "--ignore-immutable")
+							execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+						else
+							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+						end
+					end)
+				else
+					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+				end
+			end
+
+			if vim.system then
+				vim.system(cmd_parts, { text = true }, function(obj)
+					if obj.code == 0 then
+						vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+						if M_ref and M_ref.refresh_log then
+							vim.defer_fn(function()
+								if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+									M_ref.refresh_log()
+								end
+							end, 200)
+						end
+					else
+						handle_error(obj.stderr or "", obj.code)
+					end
+				end)
+			else
+				local output = vim.fn.system(cmd_parts)
+				if vim.v.shell_error ~= 0 then
+					local error_output = vim.fn.system(cmd_str .. " 2>&1")
+					handle_error(error_output, vim.v.shell_error)
+				else
+					vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+					if M_ref and M_ref.refresh_log then
+						M_ref.refresh_log()
+					end
+				end
+			end
+		end
+
 		if choice == "Squash into parent (default)" then
 			local cmd_parts = { "jj", "squash", "-r", change_id }
 			local success_msg = "Squashed change " .. change_id .. " into parent"
-			execute_jj_command(cmd_parts, success_msg, true)
+			execute_squash(cmd_parts, success_msg)
 		elseif choice == "Squash into specific revision" then
 			select_from_log_window(function(dest_id)
 				if dest_id then
 					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
-					execute_jj_command(cmd_parts, success_msg, true)
+					execute_squash(cmd_parts, success_msg)
 				end
 			end, "Select destination change for squash, then press ")
 		end
@@ -1222,6 +1271,55 @@ function Commands.squash_workflow()
 			return
 		end
 
+		local function execute_squash(cmd_parts, success_msg)
+			local cmd_str = table.concat(cmd_parts, " ")
+			vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+			local function handle_error(output, error_code)
+				local error_text = format_error_output(output, error_code)
+				if error_text:find("immutable", 1, true) then
+					vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+						if confirm == "Yes" then
+							table.insert(cmd_parts, "--ignore-immutable")
+							execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+						else
+							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+						end
+					end)
+				else
+					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+				end
+			end
+
+			if vim.system then
+				vim.system(cmd_parts, { text = true }, function(obj)
+					if obj.code == 0 then
+						vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+						if M_ref and M_ref.refresh_log then
+							vim.defer_fn(function()
+								if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+									M_ref.refresh_log()
+								end
+							end, 200)
+						end
+					else
+						handle_error(obj.stderr or "", obj.code)
+					end
+				end)
+			else
+				local output = vim.fn.system(cmd_parts)
+				if vim.v.shell_error ~= 0 then
+					local error_output = vim.fn.system(cmd_str .. " 2>&1")
+					handle_error(error_output, vim.v.shell_error)
+				else
+					vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+					if M_ref and M_ref.refresh_log then
+						M_ref.refresh_log()
+					end
+				end
+			end
+		end
+
 		if workflow == "Squash into parent (default)" then
 			vim.ui.select({
 				"Non-interactively",
@@ -1244,7 +1342,7 @@ function Commands.squash_workflow()
 					table.insert(cmd_parts, "-k")
 					success_msg = success_msg .. " using destination message, source kept"
 				end
-				execute_jj_command(cmd_parts, success_msg, true)
+				execute_squash(cmd_parts, success_msg)
 			end)
 		elseif workflow == "Squash into specific revision" then
 			vim.ui.select({
@@ -1280,7 +1378,7 @@ function Commands.squash_workflow()
 							table.insert(cmd_parts, "-k")
 							success_msg = success_msg .. " using destination message, source kept"
 						end
-						execute_jj_command(cmd_parts, success_msg, true)
+						execute_squash(cmd_parts, success_msg)
 					end)
 				end
 
@@ -1332,7 +1430,7 @@ function Commands.squash_workflow()
 						table.insert(cmd_parts, "-i")
 						success_msg = success_msg .. " interactively"
 					end
-					execute_jj_command(cmd_parts, success_msg, true)
+					execute_squash(cmd_parts, success_msg)
 				end)
 			end)
 		end
