@@ -1195,14 +1195,16 @@ function Commands.squash_change()
 			local function handle_error(output, error_code)
 				local error_text = format_error_output(output, error_code)
 				if error_text:find("immutable", 1, true) then
-					vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
-						if confirm == "Yes" then
-							table.insert(cmd_parts, "--ignore-immutable")
-							execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
-						else
-							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
-						end
-					end)
+					vim.defer_fn(function()
+						vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+							if confirm == "Yes" then
+								table.insert(cmd_parts, "--ignore-immutable")
+								execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+							else
+								vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							end
+						end)
+					end, 0)
 				else
 					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
 				end
@@ -1278,14 +1280,16 @@ function Commands.squash_workflow()
 			local function handle_error(output, error_code)
 				local error_text = format_error_output(output, error_code)
 				if error_text:find("immutable", 1, true) then
-					vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
-						if confirm == "Yes" then
-							table.insert(cmd_parts, "--ignore-immutable")
-							execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
-						else
-							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
-						end
-					end)
+					vim.defer_fn(function()
+						vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+							if confirm == "Yes" then
+								table.insert(cmd_parts, "--ignore-immutable")
+								execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+							else
+								vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							end
+						end)
+					end, 0)
 				else
 					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
 				end
