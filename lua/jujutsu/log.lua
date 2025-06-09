@@ -18,41 +18,42 @@ Log.help_win_id = nil -- For the help window
 -- Define the keymaps specific to the log window for the help display, grouped by logical operation
 local log_keymaps_info = {
 	{ group = "Window Management" },
-	{ key = "?",  desc = "Toggle keymap help" },
-	{ key = "q",  desc = "Close log window" },
-	{ key = "st", desc = "Show status window (jj st)" },
+	{ key = "?",                    desc = "Toggle keymap help" },
+	{ key = "q",                    desc = "Close log window" },
+	{ key = "st",                   desc = "Show status window (jj st)" },
 	{ group = "Navigation" },
-	{ key = "j",  desc = "Jump to next change" },
-	{ key = "k",  desc = "Jump to previous change" },
+	{ key = "j",                    desc = "Jump to next change" },
+	{ key = "k",                    desc = "Jump to previous change" },
 	{ group = "Change Management" },
-	{ key = "a",  desc = "Abandon change (jj abandon)" },
-	{ key = "ad", desc = "[A]bandon change and [D]escendants" },
-	{ key = "am", desc = "[A]bandon [M]ultiple Changes" },
-	{ key = "c",  desc = "Commit current change (jj commit)" },
-	{ key = "d",  desc = "Edit change description (jj describe)" },
-	{ key = "e",  desc = "Edit current change (jj edit)" },
-	{ key = "n",  desc = "Create new change (jj new)" },
-	{ key = "u",  desc = "Undo last operation (jj undo)" },
+	{ key = "a",                    desc = "Abandon change (jj abandon)" },
+	{ key = "ad",                   desc = "[A]bandon change and [D]escendants" },
+	{ key = "am",                   desc = "[A]bandon [M]ultiple Changes" },
+	{ key = "c",                    desc = "Commit current change (jj commit)" },
+	{ key = "d",                    desc = "Edit change description (jj describe)" },
+	{ key = "e",                    desc = "Edit current change (jj edit)" },
+	{ key = "n",                    desc = "Create new change (jj new)" },
+	{ key = "u",                    desc = "Undo last operation (jj undo)" },
 	{ group = "Change Modification" },
-	{ key = "rb", desc = "[R]e[B]ase change" },
-	{ key = "rm", desc = "[R]ebase onto [M]aster" },
-	{ key = "s",  desc = "[S]plit change" },
-	{ key = "sq", desc = "[S]quash change" },
-	{ key = "sw", desc = "[S]quash [W]orkflow" },
+	{ key = "du",                   desc = "[DU]plicate change" },
+	{ key = "rb",                   desc = "[R]e[B]ase change" },
+	{ key = "rm",                   desc = "[R]ebase onto [M]aster" },
+	{ key = "s",                    desc = "[S]plit change" },
+	{ key = "sq",                   desc = "[S]quash change" },
+	{ key = "sw",                   desc = "[S]quash [W]orkflow" },
 	{ group = "Bookmark Management" },
-	{ key = "bc", desc = "[B]ookmark [C]reate at current change" },
-	{ key = "bd", desc = "[B]ookmark [D]elete..." },
-	{ key = "bm", desc = "[B]ookmark [M]ove (set) to current change" },
+	{ key = "bc",                   desc = "[B]ookmark [C]reate at current change" },
+	{ key = "bd",                   desc = "[B]ookmark [D]elete..." },
+	{ key = "bm",                   desc = "[B]ookmark [M]ove (set) to current change" },
 	{ group = "Git Operations" },
-	{ key = "f",  desc = "Git [F]etch latest changes" },
-	{ key = "p",  desc = "Push changes (jj git push)" },
+	{ key = "f",                    desc = "Git [F]etch latest changes" },
+	{ key = "p",                    desc = "Push changes (jj git push)" },
 	{ group = "Log Display Options" },
-	{ key = "f",  desc = "Search in log (diff_contains)" },
-	{ key = "l",  desc = "Set log entry limit (-n)" },
-	{ key = "r",  desc = "Set revset filter (-r)" },
-	{ key = "T",  desc = "Change log template (-T)" },
+	{ key = "f",                    desc = "Search in log (diff_contains)" },
+	{ key = "l",                    desc = "Set log entry limit (-n)" },
+	{ key = "r",                    desc = "Set revset filter (-r)" },
+	{ key = "T",                    desc = "Change log template (-T)" },
 	{ group = "Information" },
-	{ key = "df", desc = "Show [D]iff of current change" },
+	{ key = "df",                   desc = "Show [D]iff of current change" },
 }
 
 local revset_templates = {
@@ -88,7 +89,7 @@ function Log.toggle_help_window()
 	end
 	local help_content = { " Jujutsu Log Keymaps ", "=======================" }
 	local max_key_len = 0
-	for _, map_info in ipairs(log_keymaps_info) do 
+	for _, map_info in ipairs(log_keymaps_info) do
 		if map_info.key then
 			max_key_len = math.max(max_key_len, #map_info.key)
 		end
@@ -179,13 +180,15 @@ local function setup_log_buffer_keymaps(buf)
 	map('bc', ':lua require("jujutsu").create_bookmark()<CR>', "[B]ookmark [C]reate at current change")
 	map('bd', ':lua require("jujutsu").delete_bookmark()<CR>', "[B]ookmark [D]elete...")
 	map('bm', ':lua require("jujutsu").move_bookmark()<CR>', "[B]ookmark [M]ove (set) to current change")
-	map('p', ':lua require("jujutsu").git_push()<CR>', "Push changes (jj git push)")
+	map('p', ':lua require("jujutsu").git_push()<CR>', "[P]ush changes (jj git push)")
+	map('re', ':lua require("jujutsu").restore_change()<CR>', "[RE]store Change")
 	map('rb', ':lua require("jujutsu").rebase_change()<CR>', "[R]e[B]ase change")
 	map('rm', ':lua require("jujutsu").rebase_onto_master()<CR>', "[R]ebase onto [M]aster")
 	map('s', ':lua require("jujutsu").split_change()<CR>', "[S]plit change")
 	map('sq', ':lua require("jujutsu").squash_change()<CR>', "[S]quash change")
 	map('sw', ':lua require("jujutsu").squash_workflow()<CR>', "[S]quash [W]orkflow")
 	map('df', ':lua require("jujutsu").show_diff()<CR>', "Show [D]iff of current change")
+	map('du', ':lua require("jujutsu.commands").duplicate_change()<CR>', "[DU]plicate change")
 	map('f', ':lua require("jujutsu.commands").git_fetch()<CR>', "Git [F]etch latest changes")
 	map('am', ':lua require("jujutsu.commands").abandon_multiple_changes()<CR>', "[A]bandon [M]ultiple Changes")
 	map('ad', ':lua require("jujutsu.commands").abandon_change_and_descendants()<CR>', "[A]bandon change and [D]escendants")
@@ -277,12 +280,23 @@ function Log.refresh_log_buffer()
 			if #lines > 1 and (lines[1] == "" or lines[1] == lines[2]) then
 				vim.api.nvim_buf_set_lines(current_log_buf, 0, 1, false, {})
 			end
-			-- Apply syntax highlighting
-			vim.cmd("AnsiEsc")
-			-- Now set buffer to read-only
+
 			vim.bo[current_log_buf].modifiable = false
 			vim.bo[current_log_buf].readonly = true
 			setup_log_buffer_keymaps(current_log_buf)
+
+			-- Set cursor to the line with the current change (@ symbol)
+			vim.defer_fn(function()
+				if not vim.api.nvim_win_is_valid(win_id) then return end
+				local line_count = vim.api.nvim_buf_line_count(current_log_buf)
+				for i = 1, line_count do
+					local line = vim.api.nvim_buf_get_lines(current_log_buf, i - 1, i, false)[1]
+					if line and line:find("@") then
+						vim.api.nvim_win_set_cursor(win_id, { i, 0 })
+						break
+					end
+				end
+			end, 50) -- Delay by 50ms to ensure terminal output is rendered
 		end
 	})
 end
@@ -680,9 +694,11 @@ function Log.toggle_log_window()
 
 	-- Set window options if needed (like size)
 	vim.cmd("vertical resize " .. M_ref.window_sizes.log)
-	
+
 	-- Disable cursor wrapping in the log window
 	vim.api.nvim_win_set_option(M_ref.log_win, 'wrap', false)
+	-- Prevent cursor from wrapping to the next line
+	vim.api.nvim_win_set_option(M_ref.log_win, 'wrapscan', false)
 	-- Prevent automatic resizing
 	vim.api.nvim_win_set_option(M_ref.log_win, 'winfixwidth', true)
 

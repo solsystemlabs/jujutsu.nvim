@@ -16,17 +16,108 @@ local M_ref = nil
 
 -- Helper function to format error output
 local function format_error_output(output, shell_error_code)
-	local error_text
-	if output == nil then
-		error_text = "(No error output captured)"
-	elseif type(output) ~= "string" then
-		error_text = "(Non-string error output: " .. type(output) .. ")"
-	elseif output == "" then
-		error_text = "(Empty error output, shell error code: " .. shell_error_code .. ")"
-	else
-		error_text = output
-	end
+	local error_text = output == nil and "(No error output captured)" or
+			type(output) ~= "string" and "(Non-string error output: " .. type(output) .. ")" or
+			output == "" and "(Empty error output, shell error code: " .. shell_error_code .. ")" or
+			output
 	return error_text:gsub("[\n\r]+$", "")
+end
+
+-- Helper function to get existing bookmark names, excluding deleted ones
+local function get_bookmark_names()
+	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
+	if vim.v.shell_error ~= 0 then
+		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
+		return nil
+	end
+	local local_names = {}
+	local bookmark_map = {}
+	local skip_next = false
+	for _, line in ipairs(output) do
+		if skip_next then
+			skip_next = false
+			goto continue
+		end
+		if line:match("%(deleted%)$") then
+			skip_next = true
+		elseif line:match("^%s*[^%s%(]+%s*:") then
+			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
+			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
+			if type(cleaned_name) == "string" then
+				table.insert(local_names, cleaned_name)
+				bookmark_map[cleaned_name] = { name = cleaned_name, is_remote = false }
+			else
+				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
+			end
+		end
+		::continue::
+	end
+
+	-- Fetch remote bookmarks
+	local remote_output = vim.fn.systemlist({ "jj", "bookmark", "list", "--all" })
+	if vim.v.shell_error ~= 0 then
+		vim.api.nvim_echo({ { "Error getting remote bookmark list.", "ErrorMsg" } }, true, {})
+		return local_names, {}, bookmark_map
+	end
+
+	local remote_names = {}
+	local current_bookmark = nil
+	for _, line in ipairs(remote_output) do
+		if line:match("@origin:") and not line:match("%(deleted%)$") then
+			local branch_name = line:match("^([^%s%(]+)@origin:")
+			if branch_name then
+				current_bookmark = branch_name
+				table.insert(remote_names, branch_name)
+				bookmark_map[branch_name] = { name = branch_name, is_remote = true }
+			end
+		elseif current_bookmark and line:match("^%s+@origin:") then
+			-- Additional info for the current bookmark
+			table.insert(remote_names, line)
+		elseif current_bookmark and line:match("^%s+@git:") then
+			-- Additional info for the current bookmark
+			table.insert(remote_names, line)
+		end
+	end
+
+	return local_names, remote_names, bookmark_map
+end
+
+local function select_bookmark(prompt, callback)
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks then
+		vim.api.nvim_echo({ { "Error retrieving bookmarks.", "ErrorMsg" } }, false, {})
+		return
+	end
+
+	local show_local = true
+
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined, { prompt = prompt .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark selection cancelled", "Normal" } }, false, {})
+					return
+				else
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					if bookmark_info.is_remote then
+						bookmark_name = bookmark_name .. "@origin"
+					end
+					callback(bookmark_name)
+				end
+			end)
+
+		-- Set up a keymap for toggling between local and remote
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
+	end
 end
 
 -- Execute a jj command and refresh log if necessary
@@ -42,23 +133,17 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 	-- Use vim.system for non-blocking execution if available
 	local output = ""
 	local error_output = ""
-	local completed = false
-	local success = false
 
 	local function on_exit(code)
-		completed = true
 		if code == 0 then
-			success = true
 			local message = output ~= "" and output or (success_message or "Command completed successfully.")
 			vim.notify(tostring(message), vim.log.levels.INFO, { title = "Jujutsu" })
 			if refresh_log and M_ref and M_ref.refresh_log then
-				-- Defer the refresh with a longer delay to avoid conflicts with other plugins
 				vim.defer_fn(function()
-					-- Double-check if the log window still exists before refreshing
 					if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
 						M_ref.refresh_log()
 					end
-				end, 100) -- Increased delay to 100ms
+				end, 200)
 			end
 		else
 			local error_text = format_error_output(error_output, code)
@@ -67,89 +152,25 @@ local function execute_jj_command(command_parts, success_message, refresh_log)
 		end
 	end
 
-	local function on_stdout(_, data)
-		if data then
-			output = output .. table.concat(data, "\n")
-		end
-	end
-
-	local function on_stderr(_, data)
-		if data then
-			error_output = error_output .. table.concat(data, "\n")
-		end
-	end
-
-	-- Use vim.system if available for non-blocking execution
 	if vim.system then
 		vim.system(command_parts, { text = true }, function(obj)
 			output = obj.stdout or ""
 			error_output = obj.stderr or ""
 			on_exit(obj.code)
 		end)
+		return true -- Assume success for async, errors will be notified
 	else
-		-- Fallback to blocking call if vim.system is not available
 		output = vim.fn.system(command_parts)
 		if vim.v.shell_error ~= 0 then
 			error_output = vim.fn.system(command_str .. " 2>&1")
 			on_exit(vim.v.shell_error)
-		else
-			on_exit(0)
+			return false
 		end
-	end
-
-	-- Return based on whether it was synchronous or not
-	if completed then
-		return success
-	else
-		return true -- Assume success for async, errors will be notified
+		on_exit(0)
+		return true
 	end
 end
 
--- Helper function to get existing bookmark names, excluding deleted ones
-local function get_bookmark_names()
-	local output = vim.fn.systemlist({ "jj", "bookmark", "list" })
-	if vim.v.shell_error ~= 0 then
-		vim.api.nvim_echo({ { "Error getting bookmark list.", "ErrorMsg" } }, true, {})
-		return nil
-	end
-	local names = {}
-	local bookmark_map = {}
-	local current_bookmark = nil
-	local skip_next = false
-	for _, line in ipairs(output) do
-		if skip_next then
-			skip_next = false
-			goto continue
-		end
-		-- First check if the line indicates a deleted bookmark
-		if line:match("%(deleted%)$") then
-			current_bookmark = nil
-			skip_next = true
-		elseif line:match("^%s*[^%s%(]+%s*:") then
-			-- This line contains a bookmark name (not indented much, before a colon)
-			local full_name = line:sub(1, line:find(":") - 1):gsub("^%s+", ""):gsub("%s+$", "")
-			local cleaned_name = full_name:match("^([^%s%(]+)") or full_name
-			if type(cleaned_name) == "string" then
-				table.insert(names, cleaned_name)
-				bookmark_map[cleaned_name] = cleaned_name
-				current_bookmark = cleaned_name
-			else
-				vim.api.nvim_echo({ { "Unexpected type for bookmark name: " .. type(cleaned_name), "ErrorMsg" } }, true, {})
-			end
-		elseif current_bookmark and line:match("^%s+@") then
-			-- This line contains remote tracking info for the current bookmark (indented)
-			local remote_info = line:match("^%s+([^%(]+)") or ""
-			local remote_part = remote_info:match("@[^%s%(]+") or ""
-			if remote_part ~= "" then
-				local display_name = "  " .. remote_part
-				table.insert(names, display_name)
-				bookmark_map[display_name] = current_bookmark
-			end
-		end
-		::continue::
-	end
-	return names, bookmark_map
-end
 
 -- Helper function to format changes for selection UI
 local function format_changes_for_selection(changes)
@@ -166,80 +187,117 @@ local function format_changes_for_selection(changes)
 	return options, change_ids
 end
 
--- Helper function to select a change from a list
-local function select_change(callback, limit)
-	limit = limit or 15
-	local cmd = "jj log -n " .. limit .. " --no-graph"
-	local changes = vim.fn.systemlist(cmd)
-	if vim.v.shell_error ~= 0 or #changes == 0 then
-		vim.api.nvim_echo({ { "Failed to get change list", "ErrorMsg" } }, true, {})
-		return
-	end
-
-	local options, change_ids = format_changes_for_selection(changes)
-	vim.ui.select(options, { prompt = "Select target change:" }, function(_, idx)
-		if idx and change_ids[idx] then
-			callback(change_ids[idx])
-		else
-			vim.api.nvim_echo({ { "Change selection cancelled", "Normal" } }, false, {})
-		end
-	end)
-end
-
--- Helper function to setup log window selection mapping
-local function setup_log_selection_mapping(buf, current_win, callback)
-	local opts = { noremap = true, silent = true, buffer = buf }
-	local original_cr_mapping = vim.fn.maparg("<CR>", "n", false, true)
-
-	vim.keymap.set("n", "<CR>", function()
-		local line = vim.api.nvim_get_current_line()
-		local selected_id = Utils.extract_change_id(line)
-		vim.keymap.del("n", "<CR>", { buffer = buf })
-
-		if original_cr_mapping and original_cr_mapping.buffer then
-			local restore_cmd = original_cr_mapping.mode .. (original_cr_mapping.noremap == 1 and "noremap" or "map")
-			if original_cr_mapping.silent == 1 then restore_cmd = restore_cmd .. " <silent>" end
-			vim.cmd(restore_cmd .. " <buffer> " .. original_cr_mapping.lhs .. " " .. original_cr_mapping.rhs)
-		end
-
-		if vim.api.nvim_win_is_valid(current_win) then
-			vim.api.nvim_set_current_win(current_win)
-		end
-
-		if selected_id then
-			callback(selected_id)
-		else
-			vim.api.nvim_echo({ { "No valid change ID found on that line", "WarningMsg" } }, false, {})
-			callback(nil)
-		end
-	end, opts)
-end
-
 -- Helper function to select a change from log window
 local function select_from_log_window(callback, prompt)
 	local log_module = require("jujutsu.log")
-	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
-		local current_win = vim.api.nvim_get_current_win()
-		log_module.toggle_log_window()
-		vim.api.nvim_echo({
-			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
-		}, true, {})
-		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
-			local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-			setup_log_selection_mapping(buf, current_win, callback)
+	local current_win = vim.api.nvim_get_current_win()
+
+	-- Create a persistent dialog buffer
+	local buf_dialog = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf_dialog, "JJ Selection Prompt")
+	vim.bo[buf_dialog].buftype = "nofile"
+	vim.bo[buf_dialog].bufhidden = "wipe"
+	vim.bo[buf_dialog].swapfile = false
+
+	local width = math.floor(vim.o.columns * 0.5)
+	local height = 3
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+
+	local win_dialog = vim.api.nvim_open_win(buf_dialog, false, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded"
+	})
+
+	-- Set the prompt text
+	local prompt_text = prompt or "Select a change from log window, then press "
+	vim.api.nvim_buf_set_lines(buf_dialog, 0, -1, false, {
+		prompt_text,
+		"ENTER to confirm",
+		"Press q or ESC to cancel"
+	})
+
+	-- Highlight ENTER as special
+	vim.cmd('highlight JujutsuSpecial guifg=#00ff00')
+	vim.api.nvim_buf_add_highlight(buf_dialog, vim.api.nvim_create_namespace("jujutsu"), "JujutsuSpecial", 1, 0, 5)
+
+	vim.bo[buf_dialog].modifiable = false
+	vim.bo[buf_dialog].readonly = true
+
+	local function close_dialog()
+		if vim.api.nvim_win_is_valid(win_dialog) then
+			vim.api.nvim_win_close(win_dialog, true)
 		end
-		return
+	end
+
+	local function setup_selection(buf_log)
+		local function on_select()
+			local line = vim.api.nvim_get_current_line()
+			local selected_id = Utils.extract_change_id(line)
+			vim.keymap.del("n", "<CR>", { buffer = buf_log })
+			vim.keymap.del("n", "q", { buffer = buf_log })
+			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
+
+			close_dialog()
+
+			if vim.api.nvim_win_is_valid(current_win) then
+				vim.api.nvim_set_current_win(current_win)
+			end
+
+			-- Restore log window keymaps
+			log_module.refresh_log_buffer()
+
+			if selected_id then
+				callback(selected_id)
+			else
+				vim.api.nvim_echo({ { "No valid change ID found on that line", "WarningMsg" } }, false, {})
+				callback(nil)
+			end
+		end
+
+		local function on_cancel()
+			vim.keymap.del("n", "<CR>", { buffer = buf_log })
+			vim.keymap.del("n", "q", { buffer = buf_log })
+			vim.keymap.del("n", "<Esc>", { buffer = buf_log })
+
+			close_dialog()
+
+			if vim.api.nvim_win_is_valid(current_win) then
+				vim.api.nvim_set_current_win(current_win)
+			end
+
+			-- Restore log window keymaps
+			log_module.refresh_log_buffer()
+
+			vim.api.nvim_echo({ { "Selection cancelled", "Normal" } }, false, {})
+			callback(nil)
+		end
+
+		vim.keymap.set("n", "<CR>", on_select, { noremap = true, silent = true, buffer = buf_log })
+		vim.keymap.set("n", "q", on_cancel, { noremap = true, silent = true, buffer = buf_log })
+		vim.keymap.set("n", "<Esc>", on_cancel, { noremap = true, silent = true, buffer = buf_log })
+	end
+
+	if not M_ref.log_win or not vim.api.nvim_win_is_valid(M_ref.log_win) then
+		log_module.toggle_log_window()
+		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+			local buf_log = vim.api.nvim_win_get_buf(M_ref.log_win)
+			setup_selection(buf_log)
+			vim.api.nvim_set_current_win(M_ref.log_win)
+		else
+			close_dialog()
+			vim.api.nvim_echo({ { "Failed to open log window", "ErrorMsg" } }, false, {})
+			callback(nil)
+		end
 	else
-		vim.api.nvim_echo({
-			{ prompt or "Select a change from log window, then press ", "Normal" },
-			{ "Enter",                                                  "Special" },
-			{ " to confirm",                                            "Normal" }
-		}, true, {})
-		local buf = vim.api.nvim_win_get_buf(M_ref.log_win)
-		local current_win = vim.api.nvim_get_current_win()
-		setup_log_selection_mapping(buf, current_win, callback)
+		local buf_log = vim.api.nvim_win_get_buf(M_ref.log_win)
+		setup_selection(buf_log)
+		vim.api.nvim_set_current_win(M_ref.log_win)
 	end
 end
 
@@ -307,11 +365,10 @@ function Commands.new_change()
 			callback({})
 		end
 
-		local opts = { noremap = true, silent = true, buffer = buf }
-		vim.keymap.set('n', '<Space>', toggle_selection, opts)
-		vim.keymap.set('n', '<CR>', confirm_selection, opts)
-		vim.keymap.set('n', 'q', cancel_selection, opts)
-		vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+		vim.keymap.set('n', '<Space>', toggle_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', '<CR>', confirm_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', 'q', cancel_selection, { noremap = true, silent = true, buffer = buf })
+		vim.keymap.set('n', '<Esc>', cancel_selection, { noremap = true, silent = true, buffer = buf })
 
 		vim.api.nvim_win_set_option(win, 'cursorline', true)
 		vim.api.nvim_set_current_buf(buf)
@@ -369,14 +426,8 @@ function Commands.new_change()
 					end
 				end)
 			elseif choice == "Create based on bookmark" then
-				local bookmark_names, bookmark_map = get_bookmark_names()
-				if not bookmark_names or #bookmark_names == 0 then
-					vim.api.nvim_echo({ { "No bookmarks found to base new change on.", "WarningMsg" } }, false, {})
-					return
-				end
-				vim.ui.select(bookmark_names, { prompt = "Select bookmark to base new change on:" }, function(bookmark_full)
-					if bookmark_full then
-						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+				select_bookmark("Select bookmark to base new change on:", function(bookmark)
+					if bookmark then
 						local cmd_parts = { "jj", "new", bookmark }
 						if description ~= "" then
 							table.insert(cmd_parts, "-m")
@@ -399,6 +450,91 @@ function Commands.new_change()
 			return
 		end
 		show_advanced_options(input)
+	end)
+end
+
+function Commands.restore_change()
+	vim.ui.select({ "Yes", "No" }, { prompt = "Are you sure you want to restore the current change?" },
+		function(choice)
+			if choice == "Yes" then
+				vim.api.nvim_echo({ { "Restoring current change.", "Normal" } }, false, {})
+
+				execute_jj_command({ "jj", "restore" }, "Restored current change", true)
+			else
+				vim.api.nvim_echo({ { "Restore cancelled", "Normal" } }, false, {})
+			end
+		end)
+end
+
+-- Function to duplicate a change with different placement options
+function Commands.duplicate_change()
+	local source_id = M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) and
+			Utils.extract_change_id(vim.api.nvim_get_current_line()) or nil
+	if not source_id then
+		source_id = "@"
+		vim.api.nvim_echo({ { "Using current change for duplicate.", "Normal" } }, false, {})
+	end
+
+	local function execute_duplicate_command(dest_id, position_flag)
+		local cmd_parts = { "jj", "duplicate", source_id }
+		if position_flag == "--insert-before" then
+			table.insert(cmd_parts, "--before")
+			table.insert(cmd_parts, dest_id)
+		elseif position_flag == "--insert-after" then
+			table.insert(cmd_parts, "--after")
+			table.insert(cmd_parts, dest_id)
+		else
+			table.insert(cmd_parts, "-d")
+			table.insert(cmd_parts, dest_id)
+		end
+		local position_text = position_flag and position_flag:gsub("--insert-", "") or "onto"
+		execute_jj_command(cmd_parts, "Duplicated " .. source_id .. " " .. position_text .. " " .. dest_id, true)
+	end
+
+	vim.ui.select({
+		"Select change from log window",
+		"Select bookmark",
+		"Cancel"
+	}, { prompt = "Select destination for duplicate:" }, function(dest_choice)
+		if dest_choice == "Cancel" or not dest_choice then
+			vim.api.nvim_echo({ { "Duplicate destination selection cancelled", "Normal" } }, false, {})
+			return
+		end
+
+		local function handle_destination_selection(dest_id)
+			vim.ui.select({
+				"Place onto destination",
+				"Insert before destination",
+				"Insert after destination",
+				"Cancel"
+			}, { prompt = "Select duplicate position for " .. dest_id .. ":" }, function(position_choice)
+				if position_choice == "Cancel" or not position_choice then
+					vim.api.nvim_echo({ { "Duplicate position selection cancelled", "Normal" } }, false, {})
+					return
+				end
+
+				local position_flag = position_choice == "Insert before destination" and "--insert-before" or
+						position_choice == "Insert after destination" and "--insert-after" or nil
+				execute_duplicate_command(dest_id, position_flag)
+			end)
+		end
+
+		if dest_choice == "Select change from log window" then
+			select_from_log_window(function(dest_id)
+				if dest_id then handle_destination_selection(dest_id) end
+			end, "Select destination change for duplicate, then press ")
+		else
+			local bookmark_names = get_bookmark_names()
+			if not bookmark_names or #bookmark_names == 0 then
+				vim.api.nvim_echo({ { "No bookmarks found to duplicate onto.", "WarningMsg" } }, false, {})
+				return
+			end
+			select_bookmark("Select bookmark to duplicate onto:", function(bookmark)
+				if bookmark then
+					handle_destination_selection(bookmark)
+				end
+			end)
+		end
 	end)
 end
 
@@ -478,14 +614,13 @@ function Commands.rebase_change()
 					if dest_id then handle_destination_selection(dest_id) end
 				end, "Select destination change for rebase, then press ")
 			else
-				local bookmark_names, bookmark_map = get_bookmark_names()
+				local bookmark_names = get_bookmark_names()
 				if not bookmark_names or #bookmark_names == 0 then
 					vim.api.nvim_echo({ { "No bookmarks found to rebase onto.", "WarningMsg" } }, false, {})
 					return
 				end
-				vim.ui.select(bookmark_names, { prompt = "Select bookmark to rebase onto:" }, function(bookmark_full)
-					if bookmark_full then
-						local bookmark = bookmark_map[bookmark_full] or bookmark_full
+				select_bookmark("Select bookmark to rebase onto:", function(bookmark)
+					if bookmark then
 						handle_destination_selection(bookmark)
 					end
 				end)
@@ -600,7 +735,7 @@ function Commands.git_fetch()
 end
 
 -- Bookmark management functions
-local function move_bookmark_to_change(name, change_id)
+local function move_bookmark_to_change(name, change_id, is_new_bookmark)
 	local cmd_parts = { "jj", "bookmark", "set", name, "-r", change_id }
 	local cmd_str = table.concat(cmd_parts, " ")
 	local output = vim.fn.system(cmd_str .. " 2>&1")
@@ -608,7 +743,7 @@ local function move_bookmark_to_change(name, change_id)
 		vim.api.nvim_echo({ { "Bookmark '" .. name .. "' set to " .. change_id, "Normal" } }, false, {})
 		if M_ref and M_ref.refresh_log then M_ref.refresh_log() end
 	else
-		if output and output:lower():find("refusing to move bookmark backwards", 1, true) then
+		if not is_new_bookmark and output and output:lower():find("refusing to move bookmark backwards", 1, true) then
 			vim.ui.select({ "Yes", "No" }, { prompt = "Allow moving bookmark '" .. name .. "' backward?" }, function(choice)
 				if choice == "Yes" then
 					local cmd_parts_alt = { "jj", "bookmark", "set", "--allow-backwards", name, "-r", change_id }
@@ -645,25 +780,47 @@ function Commands.create_bookmark()
 end
 
 function Commands.delete_bookmark()
-	local bookmark_names = get_bookmark_names()
-	if not bookmark_names or #bookmark_names == 0 then
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks or (#local_bookmarks == 0 and #remote_bookmarks == 0) then
 		vim.api.nvim_echo({ { "No bookmarks found to delete.", "Normal" } }, false, {})
 		return
 	end
-	vim.ui.select(bookmark_names, { prompt = "Select bookmark to delete:" }, function(selected_name)
-		if selected_name then
-			vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. selected_name .. "'?" }, function(choice)
-				if choice == "Yes" then
-					execute_jj_command({ "jj", "bookmark", "delete", selected_name }, "Bookmark '" .. selected_name .. "' deleted.",
-						true)
+
+	local show_local = true
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined,
+			{ prompt = "Select bookmark to delete" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark deletion cancelled", "Normal" } }, false, {})
+					return
 				else
-					vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					vim.ui.select({ "Yes", "No" }, { prompt = "Delete bookmark '" .. bookmark_name .. "'?" }, function(confirm)
+						if confirm == "Yes" then
+							execute_jj_command({ "jj", "bookmark", "delete", bookmark_name },
+								"Bookmark '" .. bookmark_name .. "' deleted.", true)
+						else
+							vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
+						end
+					end)
 				end
 			end)
-		else
-			vim.api.nvim_echo({ { "Bookmark deletion cancelled.", "Normal" } }, false, {})
-		end
-	end)
+
+		-- Set up a keymap for toggling between local and remote
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
+	end
+
+	show_selector()
 end
 
 function Commands.move_bookmark()
@@ -672,30 +829,53 @@ function Commands.move_bookmark()
 		vim.api.nvim_echo({ { "No change ID found on this line to move bookmark to.", "WarningMsg" } }, false, {})
 		return
 	end
-	local existing_bookmarks = get_bookmark_names() or {}
-	local options = {}
-	for _, name in ipairs(existing_bookmarks) do
-		table.insert(options, name)
+	local local_bookmarks, remote_bookmarks, bookmark_map = get_bookmark_names()
+	if not local_bookmarks or not remote_bookmarks then
+		vim.api.nvim_echo({ { "Error retrieving bookmarks.", "ErrorMsg" } }, false, {})
+		return
 	end
-	table.insert(options, "Create new bookmark...")
 
-	vim.ui.select(options, { prompt = "Select bookmark to move or create new:" }, function(selected)
-		if not selected then
-			vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
-		elseif selected == "Create new bookmark..." then
-			vim.ui.input({ prompt = "New bookmark name: " }, function(name)
-				if not name then
-					vim.api.nvim_echo({ { "Bookmark creation cancelled.", "Normal" } }, false, {})
-				elseif name == "" then
-					vim.api.nvim_echo({ { "Bookmark move cancelled: Name cannot be empty.", "WarningMsg" } }, false, {})
+	local show_local = true
+
+	local function show_selector()
+		local options = show_local and local_bookmarks or remote_bookmarks
+		local combined = vim.deepcopy(options)
+		table.insert(combined, "Set bookmark name")
+		table.insert(combined, "Cancel")
+
+		vim.ui.select(combined,
+			{ prompt = "Select bookmark to move" .. (show_local and " (Local)" or " (Remote)") .. " [Ctrl-T to toggle]:" },
+			function(choice)
+				if not choice or choice == "Cancel" then
+					vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+					return
+				elseif choice == "Set bookmark name" then
+					vim.ui.input({ prompt = "Bookmark name: " }, function(input)
+						if not input then
+							vim.api.nvim_echo({ { "Bookmark move cancelled.", "Normal" } }, false, {})
+							return
+						elseif input == "" then
+							vim.api.nvim_echo({ { "Bookmark name cannot be empty.", "WarningMsg" } }, false, {})
+							return
+						end
+						move_bookmark_to_change(input, change_id, true)
+					end)
 				else
-					move_bookmark_to_change(name, change_id)
+					local bookmark_info = bookmark_map[choice]
+					local bookmark_name = bookmark_info.name
+					move_bookmark_to_change(bookmark_name, change_id, false)
 				end
 			end)
-		else
-			move_bookmark_to_change(selected, change_id)
-		end
-	end)
+
+		-- Set up a keymap for toggling between local and remote
+		vim.keymap.set({ "n", "i" }, "<C-t>", function()
+			show_local = not show_local
+			vim.ui.select({}, { prompt = "" }, function() end) -- Close current selection
+			show_selector()
+		end, { noremap = true, silent = true, buffer = vim.api.nvim_get_current_buf() })
+	end
+
+	show_selector()
 end
 
 function Commands.edit_change()
@@ -704,7 +884,7 @@ function Commands.edit_change()
 		vim.api.nvim_echo({ { "No change ID found on this line", "WarningMsg" } }, false, {})
 		return
 	end
-	execute_jj_command({ "jj", "edit", change_id }, "Applied edit to change " .. change_id, true)
+	execute_jj_command({ "jj", "edit", change_id }, "Now editing " .. change_id, true)
 end
 
 function Commands.abandon_change()
@@ -854,11 +1034,10 @@ function Commands.abandon_multiple_changes()
 		vim.api.nvim_echo({ { "Abandon multiple changes cancelled", "Normal" } }, false, {})
 	end
 
-	local opts = { noremap = true, silent = true, buffer = log_buf }
-	vim.keymap.set('n', '<Space>', toggle_selection, opts)
-	vim.keymap.set('n', '<CR>', confirm_selection, opts)
-	vim.keymap.set('n', 'q', cancel_selection, opts)
-	vim.keymap.set('n', '<Esc>', cancel_selection, opts)
+	vim.keymap.set('n', '<Space>', toggle_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', '<CR>', confirm_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', 'q', cancel_selection, { noremap = true, silent = true, buffer = log_buf })
+	vim.keymap.set('n', '<Esc>', cancel_selection, { noremap = true, silent = true, buffer = log_buf })
 
 	vim.api.nvim_win_set_option(M_ref.log_win, 'cursorline', true)
 	vim.api.nvim_set_current_win(M_ref.log_win)
@@ -1009,16 +1188,67 @@ function Commands.squash_change()
 			return
 		end
 
+		local function execute_squash(cmd_parts, success_msg)
+			local cmd_str = table.concat(cmd_parts, " ")
+			vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+			local function handle_error(output, error_code)
+				local error_text = format_error_output(output, error_code)
+				if error_text:find("immutable", 1, true) then
+					vim.defer_fn(function()
+						vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+							if confirm == "Yes" then
+								table.insert(cmd_parts, "--ignore-immutable")
+								execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+							else
+								vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							end
+						end)
+					end, 0)
+				else
+					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+				end
+			end
+
+			if vim.system then
+				vim.system(cmd_parts, { text = true }, function(obj)
+					if obj.code == 0 then
+						vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+						if M_ref and M_ref.refresh_log then
+							vim.defer_fn(function()
+								if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+									M_ref.refresh_log()
+								end
+							end, 200)
+						end
+					else
+						handle_error(obj.stderr or "", obj.code)
+					end
+				end)
+			else
+				local output = vim.fn.system(cmd_parts)
+				if vim.v.shell_error ~= 0 then
+					local error_output = vim.fn.system(cmd_str .. " 2>&1")
+					handle_error(error_output, vim.v.shell_error)
+				else
+					vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+					if M_ref and M_ref.refresh_log then
+						M_ref.refresh_log()
+					end
+				end
+			end
+		end
+
 		if choice == "Squash into parent (default)" then
 			local cmd_parts = { "jj", "squash", "-r", change_id }
 			local success_msg = "Squashed change " .. change_id .. " into parent"
-			execute_jj_command(cmd_parts, success_msg, true)
+			execute_squash(cmd_parts, success_msg)
 		elseif choice == "Squash into specific revision" then
 			select_from_log_window(function(dest_id)
 				if dest_id then
-					local cmd_parts = { "jj", "squash", "-r", change_id, "-d", dest_id }
+					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
 					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
-					execute_jj_command(cmd_parts, success_msg, true)
+					execute_squash(cmd_parts, success_msg)
 				end
 			end, "Select destination change for squash, then press ")
 		end
@@ -1043,10 +1273,62 @@ function Commands.squash_workflow()
 			return
 		end
 
+		local function execute_squash(cmd_parts, success_msg)
+			local cmd_str = table.concat(cmd_parts, " ")
+			vim.notify("Running: " .. cmd_str .. "...", vim.log.levels.INFO, { title = "Jujutsu" })
+
+			local function handle_error(output, error_code)
+				local error_text = format_error_output(output, error_code)
+				if error_text:find("immutable", 1, true) then
+					vim.defer_fn(function()
+						vim.ui.select({ "Yes", "No" }, { prompt = "Destination is immutable. Use --ignore-immutable flag?" }, function(confirm)
+							if confirm == "Yes" then
+								table.insert(cmd_parts, "--ignore-immutable")
+								execute_jj_command(cmd_parts, success_msg .. " (ignoring immutable)", true)
+							else
+								vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							end
+						end)
+					end, 0)
+				else
+					vim.notify("Error executing: " .. cmd_str .. "\n" .. error_text, vim.log.levels.ERROR, { title = "Jujutsu Error" })
+				end
+			end
+
+			if vim.system then
+				vim.system(cmd_parts, { text = true }, function(obj)
+					if obj.code == 0 then
+						vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+						if M_ref and M_ref.refresh_log then
+							vim.defer_fn(function()
+								if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+									M_ref.refresh_log()
+								end
+							end, 200)
+						end
+					else
+						handle_error(obj.stderr or "", obj.code)
+					end
+				end)
+			else
+				local output = vim.fn.system(cmd_parts)
+				if vim.v.shell_error ~= 0 then
+					local error_output = vim.fn.system(cmd_str .. " 2>&1")
+					handle_error(error_output, vim.v.shell_error)
+				else
+					vim.notify(success_msg, vim.log.levels.INFO, { title = "Jujutsu" })
+					if M_ref and M_ref.refresh_log then
+						M_ref.refresh_log()
+					end
+				end
+			end
+		end
+
 		if workflow == "Squash into parent (default)" then
 			vim.ui.select({
 				"Non-interactively",
 				"Interactively",
+				"Use destination message and keep source (non-interactive)",
 				"Cancel"
 			}, { prompt = "Select mode for squashing into parent:" }, function(mode)
 				if mode == "Cancel" or not mode then
@@ -1059,42 +1341,67 @@ function Commands.squash_workflow()
 				if mode == "Interactively" then
 					table.insert(cmd_parts, "-i")
 					success_msg = success_msg .. " interactively"
+				elseif mode == "Use destination message and keep source (non-interactive)" then
+					table.insert(cmd_parts, "-u")
+					table.insert(cmd_parts, "-k")
+					success_msg = success_msg .. " using destination message, source kept"
 				end
-				execute_jj_command(cmd_parts, success_msg, true)
+				execute_squash(cmd_parts, success_msg)
 			end)
 		elseif workflow == "Squash into specific revision" then
-			vim.ui.input({ prompt = "Enter target revision for squash (default: parent): ", default = "" }, function(target)
-				if target == nil then
-					vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+			vim.ui.select({
+				"Select change from log window",
+				"Select bookmark",
+				"Cancel"
+			}, { prompt = "Select destination for squash:" }, function(dest_choice)
+				if dest_choice == "Cancel" or not dest_choice then
+					vim.api.nvim_echo({ { "Squash destination selection cancelled", "Normal" } }, false, {})
 					return
 				end
 
-				local cmd_parts = { "jj", "squash", "-r", change_id }
-				local success_msg = "Squashed change " .. change_id
-				if target ~= "" then
-					table.insert(cmd_parts, "-d")
-					table.insert(cmd_parts, target)
-					success_msg = success_msg .. " into " .. target
-				else
-					success_msg = success_msg .. " into parent"
+				local function handle_destination_selection(dest_id)
+					local cmd_parts = { "jj", "squash", "-f", change_id, "-t", dest_id }
+					local success_msg = "Squashed change " .. change_id .. " into " .. dest_id
+
+					vim.ui.select({
+						"Non-interactively",
+						"Interactively",
+						"Use destination message and keep source (non-interactive)",
+						"Cancel"
+					}, { prompt = "Select mode for squashing:" }, function(mode)
+						if mode == "Cancel" or not mode then
+							vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+							return
+						end
+
+						if mode == "Interactively" then
+							table.insert(cmd_parts, "-i")
+							success_msg = success_msg .. " interactively"
+						elseif mode == "Use destination message and keep source (non-interactive)" then
+							table.insert(cmd_parts, "-u")
+							table.insert(cmd_parts, "-k")
+							success_msg = success_msg .. " using destination message, source kept"
+						end
+						execute_squash(cmd_parts, success_msg)
+					end)
 				end
 
-				vim.ui.select({
-					"Non-interactively",
-					"Interactively",
-					"Cancel"
-				}, { prompt = "Select mode for squashing:" }, function(mode)
-					if mode == "Cancel" or not mode then
-						vim.api.nvim_echo({ { "Squash cancelled", "Normal" } }, false, {})
+				if dest_choice == "Select change from log window" then
+					select_from_log_window(function(dest_id)
+						if dest_id then handle_destination_selection(dest_id) end
+					end, "Select destination change for squash, then press ")
+				else
+					local bookmark_names, _ = get_bookmark_names()
+					if not bookmark_names or #bookmark_names == 0 then
+						vim.api.nvim_echo({ { "No bookmarks found to squash into.", "WarningMsg" } }, false, {})
 						return
 					end
-
-					if mode == "Interactively" then
-						table.insert(cmd_parts, "-i")
-						success_msg = success_msg .. " interactively"
-					end
-					execute_jj_command(cmd_parts, success_msg, true)
-				end)
+					select_bookmark("Select bookmark to squash into:", function(bookmark)
+						if bookmark then
+							handle_destination_selection(bookmark)
+						end
+					end)
+				end
 			end)
 		elseif workflow == "Squash with custom options" then
 			vim.ui.input({ prompt = "Enter custom squash options (e.g., -m 'message'): ", default = "" }, function(options)
@@ -1127,7 +1434,7 @@ function Commands.squash_workflow()
 						table.insert(cmd_parts, "-i")
 						success_msg = success_msg .. " interactively"
 					end
-					execute_jj_command(cmd_parts, success_msg, true)
+					execute_squash(cmd_parts, success_msg)
 				end)
 			end)
 		end
@@ -1187,13 +1494,12 @@ function Commands.show_diff()
 		end
 	})
 
-	local opts = { noremap = true, silent = true, buffer = buf }
 	vim.keymap.set('n', 'q', function()
 		if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-	end, opts)
+	end, { noremap = true, silent = true, buffer = buf })
 	vim.keymap.set('n', '<Esc>', function()
 		if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-	end, opts)
+	end, { noremap = true, silent = true, buffer = buf })
 end
 
 -- Initialize the module with a reference to the main state/module

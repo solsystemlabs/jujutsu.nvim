@@ -60,8 +60,8 @@ function M.setup()
 		vim.tbl_extend('keep', { desc = "[L]og Toggle" }, opts))
 	vim.keymap.set('n', '<leader>js', function() Status.show_status() end,
 		vim.tbl_extend('keep', { desc = "[S]tatus Show" }, opts))
-	vim.keymap.set('n', '<leader>jr', function() Log.reset_log_settings() end,
-		vim.tbl_extend('keep', { desc = "Log [R]eset Settings" }, opts))
+	vim.keymap.set('n', '<leader>jr', function() Commands.restore_change() end,
+		vim.tbl_extend('keep', { desc = "[R]estore Current" }, opts))
 	vim.keymap.set('n', '<leader>jc', function() Commands.commit_change() end,
 		vim.tbl_extend('keep', { desc = "[C]ommit Change" }, opts))
 	vim.keymap.set('n', '<leader>jn', function() Commands.new_change() end,
@@ -102,6 +102,7 @@ M.search_in_log = Log.search_in_log
 M.change_log_template = Log.change_log_template
 M.commit_change = Commands.commit_change
 M.close_status_window = Status.close_status_window
+M.restore_change = Commands.restore_change
 M.refresh_status = Status.refresh_status
 M.reset_log_settings = Log.reset_log_settings
 M.toggle_log_help = Log.toggle_help_window

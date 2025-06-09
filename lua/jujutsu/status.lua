@@ -27,12 +27,29 @@ function Status.show_status()
 		return
 	end
 
+	-- Check if a buffer with the name "JJ Status" already exists
+	local existing_buf = vim.fn.bufnr("JJ Status")
+	if existing_buf ~= -1 then
+		-- If it exists, delete it to avoid conflicts
+		vim.api.nvim_buf_delete(existing_buf, { force = true })
+	end
+
 	-- Create a new scratch buffer
 	local buf = vim.api.nvim_create_buf(false, true)
 	M_ref.status_buf = buf
 
 	-- Set buffer name/title
 	vim.api.nvim_buf_set_name(buf, "JJ Status")
+
+	-- Check if log window is open and get change ID from current line
+	local change_id = nil
+	local is_current_change = false
+	if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+		local log_buf = vim.api.nvim_win_get_buf(M_ref.log_win)
+		local current_line = vim.api.nvim_buf_get_lines(log_buf, vim.api.nvim_win_get_cursor(M_ref.log_win)[1] - 1, vim.api.nvim_win_get_cursor(M_ref.log_win)[1], false)[1]
+		change_id = require("jujutsu.utils").extract_change_id(current_line)
+		is_current_change = current_line:match("^@") ~= nil
+	end
 
 	-- Calculate window size and position - made smaller
 	local width = math.floor(vim.o.columns * 0.6) -- Reduced from 0.8
@@ -48,14 +65,14 @@ function Status.show_status()
 		col = col,
 		row = row,
 		style = "minimal",
-		border = "rounded",
-		winfixwidth = true -- Prevent automatic resizing
+		border = "rounded"
 	}
 
 	M_ref.status_win = vim.api.nvim_open_win(buf, true, win_opts)
 
-	-- Run jj st in a terminal
-	vim.fn.termopen("jj st", {
+	-- Run jj st or jj show based on whether it's the current change
+	local cmd = (change_id and not is_current_change) and "jj show -r " .. change_id or "jj st"
+	vim.fn.termopen(cmd, {
 		on_exit = function()
 			local current_win = M_ref.status_win -- Capture at time of call
 			-- Check if window still exists
@@ -93,6 +110,12 @@ function Status.refresh_status()
 	if M_ref.status_win and vim.api.nvim_win_is_valid(M_ref.status_win) then
 		-- Remember the window ID
 		local win_id = M_ref.status_win
+		-- Check if a buffer with the name "JJ Status" already exists
+		local existing_buf = vim.fn.bufnr("JJ Status")
+		if existing_buf ~= -1 and existing_buf ~= M_ref.status_buf then
+			-- If it exists and is not the current status buffer, delete it
+			vim.api.nvim_buf_delete(existing_buf, { force = true })
+		end
 		-- Create a new buffer
 		local new_buf = vim.api.nvim_create_buf(false, true)
 		-- Set buffer name (optional, but good practice)
@@ -101,8 +124,20 @@ function Status.refresh_status()
 		vim.api.nvim_win_set_buf(win_id, new_buf)
 		-- Update the buffer reference
 		M_ref.status_buf = new_buf
-		-- Run jj st again
-		vim.fn.termopen("jj st", {
+		
+		-- Check if log window is open and get change ID from current line
+		local change_id = nil
+		local is_current_change = false
+		if M_ref.log_win and vim.api.nvim_win_is_valid(M_ref.log_win) then
+			local log_buf = vim.api.nvim_win_get_buf(M_ref.log_win)
+			local current_line = vim.api.nvim_buf_get_lines(log_buf, vim.api.nvim_win_get_cursor(M_ref.log_win)[1] - 1, vim.api.nvim_win_get_cursor(M_ref.log_win)[1], false)[1]
+			change_id = require("jujutsu.utils").extract_change_id(current_line)
+			is_current_change = current_line:match("^@") ~= nil
+		end
+		
+		-- Run jj st or jj show based on whether it's the current change
+		local cmd = (change_id and not is_current_change) and "jj show -r " .. change_id or "jj st"
+		vim.fn.termopen(cmd, {
 			on_exit = function()
 				-- Check if window still exists
 				if not vim.api.nvim_win_is_valid(win_id) then
